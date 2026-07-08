@@ -1,0 +1,8 @@
+pycryptodome
+PyYAML
+qiskit
+qunetsim
+numpy
+scipy
+matplotlib
+pytest
