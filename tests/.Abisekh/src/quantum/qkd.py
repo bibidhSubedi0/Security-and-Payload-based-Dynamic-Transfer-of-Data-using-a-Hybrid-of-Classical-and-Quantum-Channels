@@ -403,6 +403,7 @@ def run_qkd(protocol="BB84", n_bits=1024, noise=0.0, eavesdropper=False, seed=No
 # ================
 # Self-test / Demo
 # ================
+
 if __name__ == "__main__":
     for proto in ("BB84", "E91"):
         for eve in (False, True):
