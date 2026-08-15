@@ -1,0 +1,27 @@
+protocol: "BB84"          # "BB84" | "E91"
+security_level: "medium"  # "low" | "medium" | "high"
+payload_size_bytes: 1024
+available_ebits: 50
+injected_qber: 0.0        # float in [0, 1], for noise simulation
+
+# Network (Phase 2+)
+host: "127.0.0.1"         # keep configurable; single-line change for multi-machine
+server_port: 5000
+data_port: 5001            # Bob listens here for direct A<->B classical data channel
+quantum_port: 5002         # Bob listens here for direct A<->B quantum (SDC) channel
+n_qubits: 200             # BB84 qubits per QKD session
+n_pairs_per_setting: 500  # E91 pairs per angle setting
+
+# Phase 7b — Classical channel fault injector (DEFAULT OFF — never set enabled: true in production)
+fault_injection:
+  enabled: false                  # MUST stay false except during Phase 8 benchmarking
+  bit_error_probability: 0.0      # per-bit flip probability (0.0 = no errors)
+  packet_loss_probability: 0.0    # per-packet simulated drop probability (0.0 = no drops)
+
+# Phase 4 — Split Controller thresholds (sweepable in Phase 8)
+split:
+  min_viable_ebits: 4          # below this, route 100% classical
+  quantum_fraction_low: 0.25   # security_level="low"
+  quantum_fraction_medium: 0.50 # security_level="medium"
+  max_quantum_fraction: 0.75   # ceiling for security_level="high"
+  bits_per_ebit: 2             # superdense coding: 2 classical bits per qubit
