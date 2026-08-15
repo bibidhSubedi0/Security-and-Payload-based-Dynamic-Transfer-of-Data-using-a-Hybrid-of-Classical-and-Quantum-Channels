@@ -19,6 +19,19 @@ class BB84Result:
     qber_sample_size: int
 
 
+BB84_QBER_THRESHOLD: float = 0.11   # ~11% — standard security threshold
+
+# Fraction of sifted (matching-basis) bits sacrificed for the QBER check sample.
+# The remaining (1 - BB84_CHECK_FRACTION) bits become raw key material.
+#
+# Larger values → more reliable QBER estimate at the cost of fewer key bits.
+# Smaller values → more key bits but riskier QBER estimate (more false "secure").
+#
+# Must match the split used in server/ebit_server.py _simulate_qkd().
+# Benchmark grid may override via run_bb84(check_fraction=...) for comparison runs.
+BB84_CHECK_FRACTION: float = 0.75
+
+
 def _prepare_qubit(bit: int, basis: int) -> QuantumCircuit:
     """Prepare one qubit: bit in Z-basis (0=|0>, 1=|1>) or X-basis (0=|+>, 1=|->)."""
     qc = QuantumCircuit(1, 1)
@@ -41,6 +54,7 @@ def run_bb84(
     n_qubits: int = 200,
     injected_noise: float = 0.0,
     seed: int | None = None,
+    check_fraction: float = BB84_CHECK_FRACTION,
 ) -> BB84Result:
     """
     Simulate BB84 between Alice and Bob.
@@ -68,9 +82,20 @@ def run_bb84(
     bob_results: list[int] = []
     for i in range(n_qubits):
         qc = _prepare_qubit(alice_bits[i], alice_bases[i])
-        # Inject noise: flip the state before Bob measures
-        if injected_noise > 0.0 and np_rng.random() < injected_noise:
-            qc.x(0)
+        # Basis-symmetric noise injection:
+        #   X gate (bit-flip)   causes errors in Z-basis measurements; no effect
+        #   in X-basis (X|+> = |+>, X|-> = -|-> — global phase only).
+        #   Z gate (phase-flip) causes errors in X-basis measurements; no effect
+        #   in Z-basis (Z|0> = |0>, Z|1> = -|1> — global phase on |1> only).
+        # Applying both independently with probability `injected_noise` gives
+        #   P(error in Z basis) = P(X applied) = injected_noise
+        #   P(error in X basis) = P(Z applied) = injected_noise
+        # so measured QBER tracks injected_noise 1:1 regardless of basis.
+        if injected_noise > 0.0:
+            if np_rng.random() < injected_noise:
+                qc.x(0)   # bit-flip:   error in Z-basis, transparent in X-basis
+            if np_rng.random() < injected_noise:
+                qc.z(0)   # phase-flip: error in X-basis, transparent in Z-basis
         _measure_qubit(qc, bob_bases[i])
         job = simulator.run(qc, shots=1)
         counts = job.result().get_counts()
@@ -86,8 +111,9 @@ def run_bb84(
             alice_bits, alice_bases, bob_bases, bob_results, [], 0.0, 0
         )
 
-    # Use first half of matching positions as QBER check sample
-    split = max(1, len(matching) // 2)
+    # Sacrifice check_fraction of sifted bits for QBER estimation;
+    # the remainder become the raw key material.
+    split = max(1, int(len(matching) * check_fraction))
     check_positions = matching[:split]
     key_positions = matching[split:]
 
@@ -107,6 +133,3 @@ def run_bb84(
         qber=qber,
         qber_sample_size=len(check_positions),
     )
-
-
-BB84_QBER_THRESHOLD = 0.11  # ~11% — standard security threshold

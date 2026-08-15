@@ -20,7 +20,7 @@ import sys
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD
+from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD, BB84_CHECK_FRACTION
 from quantum.e91 import run_e91
 from metrics.logger import get_logger
 
@@ -300,7 +300,9 @@ class EbitServer:
             i for i in range(len(bb84.alice_bits))
             if bb84.alice_bases[i] == bb84.bob_bases[i]
         ]
-        split = max(1, len(matching) // 2)
+        # Must use the same fraction as run_bb84() so check and key positions
+        # are consistent: check = matching[:split], key = matching[split:]
+        split = max(1, int(len(matching) * BB84_CHECK_FRACTION))
         key_positions = matching[split:]
         alice_key = [bb84.alice_bits[i] for i in key_positions]
         bob_key   = [bb84.bob_results[i] for i in key_positions]

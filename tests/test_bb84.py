@@ -1,7 +1,7 @@
 """Tests for BB84 quantum key distribution."""
 
 import pytest
-from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD
+from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD, BB84_CHECK_FRACTION
 
 
 def test_noiseless_qber_near_zero():
@@ -27,7 +27,7 @@ def test_noiseless_basis_agreement():
         i for i in range(len(result.alice_bits))
         if result.alice_bases[i] == result.bob_bases[i]
     ]
-    split = max(1, len(matching) // 2)
+    split = max(1, int(len(matching) * BB84_CHECK_FRACTION))
     key_positions = matching[split:]
     for pos in key_positions:
         assert result.alice_bits[pos] == result.bob_results[pos], (
@@ -65,3 +65,60 @@ def test_qber_below_threshold_at_low_noise():
     assert result.qber < BB84_QBER_THRESHOLD, (
         f"5% injected noise should keep QBER below threshold, got {result.qber:.4f}"
     )
+
+
+# ---------------------------------------------------------------------------
+# BB84_CHECK_FRACTION tests (Phase 8)
+# ---------------------------------------------------------------------------
+
+def test_check_fraction_constant_exported():
+    """BB84_CHECK_FRACTION must be exported, in (0, 1), and ≥ 0.50."""
+    assert 0.0 < BB84_CHECK_FRACTION < 1.0, (
+        f"BB84_CHECK_FRACTION={BB84_CHECK_FRACTION} must be in (0, 1)"
+    )
+    assert BB84_CHECK_FRACTION >= 0.50, (
+        "Check fraction should use a majority of sifted bits for reliable QBER estimation"
+    )
+    print(f"\n[check_fraction] BB84_CHECK_FRACTION={BB84_CHECK_FRACTION}")
+
+
+def test_check_sample_size_matches_fraction():
+    """
+    qber_sample_size returned by run_bb84() must equal
+    max(1, int(len(matching) * BB84_CHECK_FRACTION)).
+    """
+    result = run_bb84(n_qubits=400, injected_noise=0.0, seed=42)
+    matching = [
+        i for i in range(len(result.alice_bits))
+        if result.alice_bases[i] == result.bob_bases[i]
+    ]
+    expected_check = max(1, int(len(matching) * BB84_CHECK_FRACTION))
+    assert result.qber_sample_size == expected_check, (
+        f"qber_sample_size={result.qber_sample_size} but expected {expected_check} "
+        f"(matching={len(matching)}, BB84_CHECK_FRACTION={BB84_CHECK_FRACTION})"
+    )
+    print(f"\n[check_sample] matching={len(matching)}  "
+          f"check={result.qber_sample_size}  key={len(result.sifted_key)}  "
+          f"fraction={BB84_CHECK_FRACTION}")
+
+
+def test_check_fraction_parameter_overrides_default():
+    """
+    Passing check_fraction explicitly overrides BB84_CHECK_FRACTION.
+    A smaller check_fraction leaves more bits as key material.
+    """
+    n_qubits = 400
+    seed = 10
+    result_default = run_bb84(n_qubits=n_qubits, injected_noise=0.0, seed=seed)
+    result_narrow  = run_bb84(n_qubits=n_qubits, injected_noise=0.0, seed=seed,
+                               check_fraction=0.30)
+    # Narrower check → smaller check sample, larger key
+    assert result_narrow.qber_sample_size < result_default.qber_sample_size, (
+        "check_fraction=0.30 should yield a smaller check sample than default"
+    )
+    assert len(result_narrow.sifted_key) > len(result_default.sifted_key), (
+        "check_fraction=0.30 should yield a larger sifted key than default"
+    )
+    print(f"\n[check_fraction_param]"
+          f"  default check={result_default.qber_sample_size} key={len(result_default.sifted_key)}"
+          f"  narrow  check={result_narrow.qber_sample_size}  key={len(result_narrow.sifted_key)}")
