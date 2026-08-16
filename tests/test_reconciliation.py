@@ -30,6 +30,8 @@ import pytest
 import sys
 import pathlib
 
+pytestmark = pytest.mark.timeout(30)
+
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from classical.aes_channel import derive_key
@@ -406,7 +408,8 @@ class TestBlockSizeHeuristic:
         (0.05,  14),   # floor(0.73/0.05)
         (0.10,   7),   # floor(0.73/0.10)
         (0.11,   6),   # floor(0.73/0.11)
-        (0.0,  7300),  # floor(0.73/1e-4) — noiseless, EPSILON kicks in
+        (0.0,  7299),  # floor(0.73/1e-4) — noiseless, EPSILON kicks in
+                      # (7299 not 7300: 0.73/1e-4 in float arithmetic is 7299.999...)
     ])
     def test_values(self, qber, expected):
         assert block_size_for_qber(qber) == expected

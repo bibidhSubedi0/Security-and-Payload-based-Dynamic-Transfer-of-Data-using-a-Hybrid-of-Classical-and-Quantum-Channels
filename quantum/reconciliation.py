@@ -199,9 +199,17 @@ def reconcile_alice(
     for bidx in mismatch_indices:
         s, e = blocks[bidx]
         lo, hi = s, e
+        max_depth = math.ceil(math.log2(max(e - s, 2))) + 2  # hard cap: log2(block) + slack
+        depth = 0
 
         # Bisect until the block contains exactly one bit
         while hi - lo > 1:
+            depth += 1
+            if depth > max_depth:
+                raise RuntimeError(
+                    f"Bisect depth {depth} exceeded cap {max_depth}: "
+                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} — logic error"
+                )
             mid = (lo + hi) // 2
             _enc_send(dc, {"type": "SUBPARITY", "sp": _parity(bits, lo, mid)})
             parity_bits_revealed += 1
@@ -274,8 +282,16 @@ def reconcile_bob(
     for bidx in mismatch_indices:
         s, e = blocks[bidx]
         lo, hi = s, e
+        max_depth = math.ceil(math.log2(max(e - s, 2))) + 2  # hard cap
+        depth = 0
 
         while hi - lo > 1:
+            depth += 1
+            if depth > max_depth:
+                raise RuntimeError(
+                    f"Bisect depth {depth} exceeded cap {max_depth}: "
+                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} — logic error"
+                )
             mid = (lo + hi) // 2
             msg = _dec_recv(dc)
             assert msg["type"] == "SUBPARITY"
@@ -315,47 +331,101 @@ def reconcile_bob(
 # ---------------------------------------------------------------------------
 
 
+_VERIFY_FAIL = b"hbd-verify-fail"
+_VERIFY_PING = b"hbd-verify-ping"
+_VERIFY_PONG = b"hbd-verify-pong"
+
+
 def verify_key_alice(dc, aes_key: bytes) -> None:
     """
     Send a short AES-GCM-authenticated ping; receive and verify Bob's pong.
 
-    If decryption fails (keys still differ after reconciliation), raises
-    ``ReconciliationIncompleteError`` immediately — before any payload is
-    touched.  This is the safety net for the even-error-count edge case.
+    Failure path (keys differ or any exception): Bob sends an explicit failure
+    marker encrypted with the constant ``_RECON_AUTH_KEY``.  Alice receives it,
+    tries to decrypt with ``aes_key`` first (succeeds on the happy path), falls
+    through to ``_RECON_AUTH_KEY`` on mismatch.  This guarantees Alice's
+    ``recv()`` always unblocks regardless of what exception Bob raised.
+
+    Robustness: if Alice's own ping send or pong receive raises for any reason,
+    Alice sends a failure marker to unblock Bob before propagating the exception.
     """
-    dc.send(encrypt(b"hbd-verify-ping", aes_key))
     try:
-        pong = decrypt(dc.recv(), aes_key)
-    except InvalidTag:
+        dc.send(encrypt(_VERIFY_PING, aes_key))
+        raw = dc.recv()
+    except Exception as exc:
+        # Something broke before we could exchange messages.
+        # Try to unblock Bob's recv() with a failure marker; ignore send errors.
+        try:
+            dc.send(encrypt(_VERIFY_FAIL, _RECON_AUTH_KEY))
+        except Exception:
+            try:
+                dc.close()
+            except Exception:
+                pass
         raise ReconciliationIncompleteError(
-            "Key verification failed: AES-GCM tag mismatch after reconciliation. "
-            "Likely cause: even-count errors in a block (single-pass limitation)."
-        )
-    if pong != b"hbd-verify-pong":
+            f"Key verification failed during exchange: {exc}"
+        ) from exc
+
+    # Try to decode as a valid pong (success path: keys match)
+    try:
+        pong = decrypt(raw, aes_key)
+        if pong == _VERIFY_PONG:
+            return  # keys match — all good
         raise ReconciliationIncompleteError(
             f"Key verification: unexpected pong value {pong!r}"
         )
+    except InvalidTag:
+        pass  # fall through: Bob may have sent the failure marker instead
+
+    # Try to decode as Bob's explicit failure marker (keys-differ path)
+    try:
+        marker = decrypt(raw, _RECON_AUTH_KEY)
+        if marker == _VERIFY_FAIL:
+            raise ReconciliationIncompleteError(
+                "Key verification failed: Bob reported key mismatch. "
+                "Likely cause: even-count errors in a block (single-pass limitation)."
+            )
+    except InvalidTag:
+        pass
+
+    # Neither pong nor failure marker decoded — treat as mismatch
+    raise ReconciliationIncompleteError(
+        "Key verification failed: unrecognised response from Bob."
+    )
 
 
 def verify_key_bob(dc, aes_key: bytes) -> None:
     """
     Receive Alice's ping and reply with an authenticated pong.
 
-    Raises ``ReconciliationIncompleteError`` if Alice's ping cannot be
-    decrypted (keys still differ).
+    Robustness: if ANY exception occurs — decrypt failure (InvalidTag), wrong
+    plaintext, socket error, or anything else — Bob sends a failure marker
+    encrypted with the constant ``_RECON_AUTH_KEY`` before raising, so Alice's
+    ``recv()`` always unblocks.  If even the failure-marker send fails, Bob
+    closes the socket explicitly to break Alice's recv().
     """
     try:
         ping = decrypt(dc.recv(), aes_key)
-    except InvalidTag:
+        if ping != _VERIFY_PING:
+            raise ReconciliationIncompleteError(
+                f"Key verification: unexpected ping value {ping!r}"
+            )
+        dc.send(encrypt(_VERIFY_PONG, aes_key))
+    except Exception as exc:
+        # No matter what went wrong, unblock Alice's recv() before propagating.
+        try:
+            dc.send(encrypt(_VERIFY_FAIL, _RECON_AUTH_KEY))
+        except Exception:
+            try:
+                dc.close()
+            except Exception:
+                pass
+        if isinstance(exc, ReconciliationIncompleteError):
+            raise
         raise ReconciliationIncompleteError(
             "Key verification failed: AES-GCM tag mismatch after reconciliation. "
             "Likely cause: even-count errors in a block (single-pass limitation)."
-        )
-    if ping != b"hbd-verify-ping":
-        raise ReconciliationIncompleteError(
-            f"Key verification: unexpected ping value {ping!r}"
-        )
-    dc.send(encrypt(b"hbd-verify-pong", aes_key))
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
