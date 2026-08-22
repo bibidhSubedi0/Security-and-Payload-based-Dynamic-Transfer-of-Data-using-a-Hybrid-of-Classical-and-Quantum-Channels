@@ -1,60 +1,65 @@
 """
-Single-pass parity-based key reconciliation for BB84 QKD.
+Single-Pass Parity-Based Key Reconciliation for BB84 QKD
+=========================================================
 
+-------
 Purpose
 -------
 After sifting and QBER checking, Alice and Bob share nominally the same raw key
 bits, but channel noise introduces bit errors that survive the QBER check when
-the measured QBER is below the 0.11 abort threshold.  These residual errors cause
-AES-GCM ``InvalidTag`` failures during payload transfer.  This module corrects
+the measured QBER is below the 0.11 abort threshold. These residual errors cause
+AES-GCM InvalidTag failures during payload transfer. This module corrects
 single bit errors per block before HKDF key derivation, substantially reducing
 the key-mismatch rate.
 
-Algorithm overview
 ------------------
-1. **Block size selection**: ``block_size = max(1, floor(0.73 / max(QBER, ε)))``.
+Algorithm Overview
+------------------
+1. Block size selection: block_size = max(1, floor(0.73 / max(QBER, epsilon))).
    This is the standard Cascade pass-1 heuristic: at error rate p, the expected
-   errors per block ≈ 0.73, maximising single-pass efficiency.  ε = 1e-4 avoids
-   division by zero in the noiseless case.
+   errors per block approx 0.73, maximising single-pass efficiency. epsilon = 1e-4
+   avoids division by zero in the noiseless case.
 
-2. **Block partition**: Alice's and Bob's key bits (post-sifting, pre-HKDF) are
-   split into consecutive blocks of ``block_size`` (last block may be shorter).
+2. Block partition: Alice's and Bob's key bits (post-sifting, pre-HKDF) are
+   split into consecutive blocks of block_size (last block may be shorter).
 
-3. **Parity exchange**: Alice sends all block parities in one message.  Bob
+3. Parity exchange: Alice sends all block parities in one message. Bob
    computes his own parities, identifies mismatched blocks, and sends back the
    mismatch indices.
 
-4. **Binary search correction**: For each mismatched block Alice and Bob run a
+4. Binary search correction: For each mismatched block Alice and Bob run a
    bisection protocol (Alice sends sub-block parities, Bob navigates left/right,
-   Alice finally sends the correct bit value at the isolated position).  Bob
+   Alice finally sends the correct bit value at the isolated position). Bob
    corrects his bit.
 
-5. **Privacy amplification (simplified)**: After reconciliation, both sides
-   discard ``parity_bits_revealed`` bits from the front of the key.  This is an
+5. Privacy amplification (simplified): After reconciliation, both sides
+   discard parity_bits_revealed bits from the front of the key. This is an
    approximation of full privacy amplification: a rigorous implementation uses a
    universal hash function (e.g., Toeplitz) sized to the actual Shannon leakage.
    The approximation is acceptable here; the remaining bits are further processed
    by HKDF-SHA256, which provides additional extraction.
 
-6. **Key verification**: After deriving the final AES key via HKDF, Alice and
-   Bob exchange a short AES-GCM authenticated ping/pong.  If decryption fails,
-   ``ReconciliationIncompleteError`` is raised immediately — a clear, diagnosable
-   failure instead of a silent ``InvalidTag`` buried deep in the payload transfer.
+6. Key verification: After deriving the final AES key via HKDF, Alice and
+   Bob exchange a short AES-GCM authenticated ping/pong. If decryption fails,
+   ReconciliationIncompleteError is raised immediately which is a clear, diagnosable
+   failure instead of a silent InvalidTag buried deep in the payload transfer.
 
-Known limitation — single-pass only
--------------------------------------
-A block containing an **even number of errors** passes its parity check silently.
-The errors remain in the reconciled key and are NOT corrected.  This is a known,
-accepted limitation of single-pass reconciliation.  Full multi-pass Cascade with
+------------------------------------
+Known Limitation - Single-Pass Only
+------------------------------------
+A block containing an EVEN number of errors passes its parity check silently.
+The errors remain in the reconciled key and are NOT corrected. This is a known,
+accepted limitation of single-pass reconciliation. Full multi-pass Cascade with
 random block reshuffling between passes would catch these cases but is out of
-scope for this project.  The limitation is explicitly tested in
-``tests/test_reconciliation.py`` (``test_even_error_count_undetected``).
+scope for this project. The limitation is explicitly tested in
+tests/test_reconciliation.py (test_even_error_count_undetected).
 
-Channel security model
------------------------
+----------------------
+Channel Security Model
+----------------------
 Reconciliation messages are encrypted and authenticated with AES-256-GCM using a
-fixed project-level constant key (``_RECON_AUTH_KEY``).  This key is NOT the
-session key — it is embedded in the source and therefore not secret.  This is
+fixed project-level constant key (_RECON_AUTH_KEY). This key is NOT the
+session key -- it is embedded in the source and therefore not secret. This is
 acceptable because:
   (a) parity bits are discarded in privacy amplification, so leaking them to a
       passive eavesdropper provides at most 1 bit of key information per block;
@@ -64,15 +69,16 @@ acceptable because:
 Using a constant auth key avoids the chicken-and-egg problem of deriving an
 auth key from the (not-yet-agreed-upon) session bits.
 
+----------
 Public API
 ----------
-``block_size_for_qber(qber)``   → block size integer
-``reconcile_alice(bits, qber, dc)`` → ReconcileResult
-``reconcile_bob(bits, qber, dc)``   → ReconcileResult
-``verify_key_alice(dc, aes_key)``   → None (raises ReconciliationIncompleteError)
-``verify_key_bob(dc, aes_key)``     → None (raises ReconciliationIncompleteError)
-``ReconcileResult``                 dataclass
-``ReconciliationIncompleteError``   exception
+block_size_for_qber(qber)          -> block size integer
+reconcile_alice(bits, qber, dc)    -> ReconcileResult
+reconcile_bob(bits, qber, dc)      -> ReconcileResult
+verify_key_alice(dc, aes_key)      -> None (raises ReconciliationIncompleteError)
+verify_key_bob(dc, aes_key)        -> None (raises ReconciliationIncompleteError)
+ReconcileResult                    dataclass
+ReconciliationIncompleteError      exception
 """
 
 from __future__ import annotations
@@ -103,14 +109,14 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 # Fixed auth key for reconciliation channel messages only.
-# NOT the session key.  See module docstring for rationale.
+# NOT the session key. See module docstring for rationale.
 _RECON_AUTH_KEY: bytes = hashlib.sha256(b"hbd-class-quant-recon-v1").digest()
 
 EPSILON: float = 1e-4  # Avoid division by zero at QBER = 0
 
 
 # ---------------------------------------------------------------------------
-# Public types
+# Public Types
 # ---------------------------------------------------------------------------
 
 
@@ -120,7 +126,7 @@ class ReconciliationIncompleteError(Exception):
 
     Indicates that at least one block contained an even number of errors
     (the documented single-pass limitation), leaving the reconciled keys
-    still different.  The caller should treat this as a session failure
+    still different. The caller should treat this as a session failure
     distinct from KEY_MISMATCH_ERROR (which occurs without reconciliation).
     """
 
@@ -135,7 +141,7 @@ class ReconcileResult:
 
 
 # ---------------------------------------------------------------------------
-# Public helpers
+# Public Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -143,15 +149,28 @@ def block_size_for_qber(qber: float) -> int:
     """
     Cascade pass-1 heuristic: block_size = floor(0.73 / max(qber, EPSILON)).
 
-    At the returned size, the expected number of errors per block ≈ 0.73,
-    which maximises single-pass detection efficiency.  The result is capped at
-    1 so it is always ≥ 1.
+    At the returned size, the expected number of errors per block approx 0.73,
+    which maximises single-pass detection efficiency. The result is capped at
+    1 so it is always >= 1.
+
+    ----------
+    Parameters
+    ----------
+    qber : float
+        Quantum Bit Error Rate measured during check-bit phase. Range [0, 1].
+
+    -------
+    Returns
+    -------
+    int
+        Optimal block size for single-pass reconciliation at this QBER.
+        For qber=0.01 -> 73. For qber=0.05 -> 14. For qber=0.10 -> 7.
     """
     return max(1, math.floor(0.73 / max(qber, EPSILON)))
 
 
 # ---------------------------------------------------------------------------
-# Core reconciliation — Alice (reference) side
+# Core Reconciliation - Alice (Reference) Side
 # ---------------------------------------------------------------------------
 
 
@@ -161,18 +180,39 @@ def reconcile_alice(
     dc,
 ) -> ReconcileResult:
     """
-    Run single-pass reconciliation — Alice (authoritative reference) side.
+    Run single-pass reconciliation - Alice (authoritative reference) side.
 
+    ----------
     Parameters
     ----------
-    raw_bits : Alice's raw sifted key bits (after check-bit split, before HKDF).
-    qber     : QBER measured during the check-bit phase (used for block sizing).
-    dc       : DataChannel — used *before* the payload transfer begins, on the
-               same classical socket.  Caller must ensure the channel is connected.
+    raw_bits : list[int]
+        Alice's raw sifted key bits (after check-bit split, before HKDF).
+    qber : float
+        QBER measured during the check-bit phase (used for block sizing).
+    dc : DataChannel
+        Classical data channel - used BEFORE the payload transfer begins, on
+        the same classical socket. Caller must ensure the channel is connected.
 
+    -------
     Returns
     -------
-    ReconcileResult with reconciled_bits ready for derive_key().
+    ReconcileResult
+        reconciled_bits ready for derive_key().
+        bits_corrected is always 0 (Alice is the reference).
+        bits_sacrificed = number of parity bits revealed during protocol.
+
+    --------------
+    Protocol Steps
+    --------------
+    1. Partition raw_bits into blocks of size block_size_for_qber(qber).
+    2. Send all block parities to Bob (encrypted with _RECON_AUTH_KEY).
+    3. Receive mismatch_indices from Bob (blocks where parity differed).
+    4. For each mismatched block, run binary search:
+         - Send sub-block parity, Bob responds L/R
+         - Repeat until single-bit position isolated
+         - Send correct bit value at that position
+    5. Send sacrificed count (total parity bits revealed).
+    6. Both sides trim sacrificed bits from front of key (privacy amplification).
     """
     bits = list(raw_bits)
     n = len(bits)
@@ -186,16 +226,16 @@ def reconcile_alice(
     bsz = min(block_size_for_qber(qber), n)
     blocks = _make_blocks(n, bsz)
 
-    # ── Step 1: send all block parities ──────────────────────────────────
+    # Step 1: send all block parities
     parities = [_parity(bits, s, e) for s, e in blocks]
     _enc_send(dc, {"type": "PARITIES", "parities": parities, "bsz": bsz, "n": n})
 
-    # ── Step 2: receive mismatch indices from Bob ─────────────────────────
+    # Step 2: receive mismatch indices from Bob
     mismatch_indices: list[int] = _dec_recv(dc)["mismatch_indices"]
 
     parity_bits_revealed = len(blocks)  # one bit per block already revealed
 
-    # ── Step 3: binary search + correction for each mismatched block ──────
+    # Step 3: binary search + correction for each mismatched block
     for bidx in mismatch_indices:
         s, e = blocks[bidx]
         lo, hi = s, e
@@ -208,7 +248,7 @@ def reconcile_alice(
             if depth > max_depth:
                 raise RuntimeError(
                     f"Bisect depth {depth} exceeded cap {max_depth}: "
-                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} — logic error"
+                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} - logic error"
                 )
             mid = (lo + hi) // 2
             _enc_send(dc, {"type": "SUBPARITY", "sp": _parity(bits, lo, mid)})
@@ -223,7 +263,7 @@ def reconcile_alice(
         _enc_send(dc, {"type": "CORRECT", "pos": lo, "val": bits[lo]})
         parity_bits_revealed += 1  # the correct bit value is revealed
 
-    # ── Step 4: privacy amplification — trim revealed bits from the front ─
+    # Step 4: privacy amplification -- trim revealed bits from the front
     sacrificed = min(parity_bits_revealed, n)
     _enc_send(dc, {"type": "DONE", "sacrificed": sacrificed})
 
@@ -235,7 +275,7 @@ def reconcile_alice(
 
 
 # ---------------------------------------------------------------------------
-# Core reconciliation — Bob (corrected) side
+# Core Reconciliation - Bob (Corrected) Side
 # ---------------------------------------------------------------------------
 
 
@@ -245,15 +285,33 @@ def reconcile_bob(
     dc,
 ) -> ReconcileResult:
     """
-    Run single-pass reconciliation — Bob (corrected) side.
+    Run single-pass reconciliation - Bob (corrected) side.
 
     Receives Alice's block parities, identifies mismatches, participates in
     binary search for each, applies corrections, and trims the same number of
     bits as Alice for privacy amplification.
+
+    ----------
+    Parameters
+    ----------
+    raw_bits : list[int]
+        Bob's raw sifted key bits (after check-bit split, before HKDF).
+    qber : float
+        QBER measured during the check-bit phase (used for block sizing).
+    dc : DataChannel
+        Classical data channel - used BEFORE the payload transfer begins.
+
+    -------
+    Returns
+    -------
+    ReconcileResult
+        reconciled_bits ready for derive_key().
+        bits_corrected = number of bit flips applied.
+        bits_sacrificed = same as Alice (must match exactly).
     """
     bits = list(raw_bits)
 
-    # ── Step 1: receive block parities ───────────────────────────────────
+    # Step 1: receive block parities
     msg = _dec_recv(dc)
     assert msg["type"] == "PARITIES", f"Expected PARITIES, got {msg['type']}"
     alice_parities: list[int] = msg["parities"]
@@ -273,12 +331,12 @@ def reconcile_bob(
         if _parity(bits, s, e) != alice_parities[bidx]
     ]
 
-    # ── Step 2: send mismatch indices ─────────────────────────────────────
+    # Step 2: send mismatch indices
     _enc_send(dc, {"mismatch_indices": mismatch_indices})
 
     bits_corrected = 0
 
-    # ── Step 3: binary search + correction ────────────────────────────────
+    # Step 3: binary search + correction
     for bidx in mismatch_indices:
         s, e = blocks[bidx]
         lo, hi = s, e
@@ -290,7 +348,7 @@ def reconcile_bob(
             if depth > max_depth:
                 raise RuntimeError(
                     f"Bisect depth {depth} exceeded cap {max_depth}: "
-                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} — logic error"
+                    f"block={bidx} lo={lo} hi={hi} bsz={bsz} - logic error"
                 )
             mid = (lo + hi) // 2
             msg = _dec_recv(dc)
@@ -314,7 +372,7 @@ def reconcile_bob(
             bits[pos] = val
             bits_corrected += 1
 
-    # ── Step 4: receive sacrificed count and trim (must match Alice exactly) ─
+    # Step 4: receive sacrificed count and trim (must match Alice exactly)
     msg = _dec_recv(dc)
     assert msg["type"] == "DONE"
     sacrificed: int = msg["sacrificed"]
@@ -327,7 +385,7 @@ def reconcile_bob(
 
 
 # ---------------------------------------------------------------------------
-# Post-reconciliation key verification
+# Post-Reconciliation Key Verification
 # ---------------------------------------------------------------------------
 
 
@@ -341,10 +399,10 @@ def verify_key_alice(dc, aes_key: bytes) -> None:
     Send a short AES-GCM-authenticated ping; receive and verify Bob's pong.
 
     Failure path (keys differ or any exception): Bob sends an explicit failure
-    marker encrypted with the constant ``_RECON_AUTH_KEY``.  Alice receives it,
-    tries to decrypt with ``aes_key`` first (succeeds on the happy path), falls
-    through to ``_RECON_AUTH_KEY`` on mismatch.  This guarantees Alice's
-    ``recv()`` always unblocks regardless of what exception Bob raised.
+    marker encrypted with the constant _RECON_AUTH_KEY. Alice receives it,
+    tries to decrypt with aes_key first (succeeds on the happy path), falls
+    through to _RECON_AUTH_KEY on mismatch. This guarantees Alice's recv()
+    always unblocks regardless of what exception Bob raised.
 
     Robustness: if Alice's own ping send or pong receive raises for any reason,
     Alice sends a failure marker to unblock Bob before propagating the exception.
@@ -370,7 +428,7 @@ def verify_key_alice(dc, aes_key: bytes) -> None:
     try:
         pong = decrypt(raw, aes_key)
         if pong == _VERIFY_PONG:
-            return  # keys match — all good
+            return  # keys match - all good
         raise ReconciliationIncompleteError(
             f"Key verification: unexpected pong value {pong!r}"
         )
@@ -388,7 +446,7 @@ def verify_key_alice(dc, aes_key: bytes) -> None:
     except InvalidTag:
         pass
 
-    # Neither pong nor failure marker decoded — treat as mismatch
+    # Neither pong nor failure marker decoded - treat as mismatch
     raise ReconciliationIncompleteError(
         "Key verification failed: unrecognised response from Bob."
     )
@@ -398,10 +456,10 @@ def verify_key_bob(dc, aes_key: bytes) -> None:
     """
     Receive Alice's ping and reply with an authenticated pong.
 
-    Robustness: if ANY exception occurs — decrypt failure (InvalidTag), wrong
-    plaintext, socket error, or anything else — Bob sends a failure marker
-    encrypted with the constant ``_RECON_AUTH_KEY`` before raising, so Alice's
-    ``recv()`` always unblocks.  If even the failure-marker send fails, Bob
+    Robustness: if ANY exception occurs - decrypt failure (InvalidTag), wrong
+    plaintext, socket error, or anything else - Bob sends a failure marker
+    encrypted with the constant _RECON_AUTH_KEY before raising, so Alice's
+    recv() always unblocks. If even the failure-marker send fails, Bob
     closes the socket explicitly to break Alice's recv().
     """
     try:
@@ -429,7 +487,7 @@ def verify_key_bob(dc, aes_key: bytes) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Private helpers
+# Private Helpers
 # ---------------------------------------------------------------------------
 
 
