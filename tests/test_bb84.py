@@ -1,6 +1,9 @@
 """Tests for BB84 quantum key distribution."""
 
 import pytest
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+
 from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD, BB84_CHECK_FRACTION
 
 

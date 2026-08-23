@@ -1,4 +1,4 @@
-"""
+r"""
 Superdense Coding: 2 Classical Bits Per Qubit
 ==============================================
 
@@ -144,7 +144,7 @@ DECODING = {
 
 @dataclass
 class SDCResult:
-    """
+    r"""
     Result of a single superdense coding round-trip.
 
     ----------
@@ -163,7 +163,7 @@ class SDCResult:
 
 
 def encode_and_decode(bit1: int, bit0: int, simulator: AerSimulator | None = None) -> SDCResult:
-    """
+    r"""
     Full SDC round-trip for a single 2-bit message.
 
     ----------
@@ -232,7 +232,7 @@ def encode_and_decode(bit1: int, bit0: int, simulator: AerSimulator | None = Non
 
 
 def run_superdense_coding_all() -> list[SDCResult]:
-    """
+    r"""
     Run all four 2-bit messages and return results.
 
     -------

@@ -220,6 +220,7 @@ REQUIRED_FIELDS = {
     "transfer_elapsed_s", "throughput_bytes_per_s", "latency_s",
     "echo_outcome", "echo_recovered", "mismatch_source", "echo_diagnosis",
     "retransmit_bytes",
+    "bits_corrected", "bits_sacrificed",
     "fault_injection_enabled", "ber_simulated", "snr_db_simulated",
     "plr_simulated", "bits_injected_errors", "packets_simulated_dropped",
 }
@@ -479,7 +480,7 @@ def test_jsonl_format_and_required_fields():
             obj = json.loads(line)         # must be valid JSON
             missing = REQUIRED_FIELDS - set(obj.keys())
             assert not missing, f"Missing fields: {missing}"
-            assert obj["schema_version"] == "1.0"
+            assert obj["schema_version"] == "1.1"
             ids.add(obj["transfer_id"])
 
         assert len(ids) == 3, "Each record must have a unique transfer_id"

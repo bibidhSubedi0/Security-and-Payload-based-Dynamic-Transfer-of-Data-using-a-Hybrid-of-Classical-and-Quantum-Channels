@@ -1,4 +1,4 @@
-"""
+r"""
 Single-Pass Parity-Based Key Reconciliation for BB84 QKD
 =========================================================
 
@@ -121,7 +121,7 @@ EPSILON: float = 1e-4  # Avoid division by zero at QBER = 0
 
 
 class ReconciliationIncompleteError(Exception):
-    """
+    r"""
     Raised when key verification fails after reconciliation.
 
     Indicates that at least one block contained an even number of errors
@@ -133,7 +133,7 @@ class ReconciliationIncompleteError(Exception):
 
 @dataclass
 class ReconcileResult:
-    """Return value of reconcile_alice / reconcile_bob."""
+    r"""Return value of reconcile_alice / reconcile_bob."""
 
     reconciled_bits: list[int]  # bits remaining after correction + PA trim
     bits_corrected: int          # errors corrected (Bob's view; always 0 for Alice)
@@ -146,7 +146,7 @@ class ReconcileResult:
 
 
 def block_size_for_qber(qber: float) -> int:
-    """
+    r"""
     Cascade pass-1 heuristic: block_size = floor(0.73 / max(qber, EPSILON)).
 
     At the returned size, the expected number of errors per block approx 0.73,
@@ -179,7 +179,7 @@ def reconcile_alice(
     qber: float,
     dc,
 ) -> ReconcileResult:
-    """
+    r"""
     Run single-pass reconciliation - Alice (authoritative reference) side.
 
     ----------
@@ -284,7 +284,7 @@ def reconcile_bob(
     qber: float,
     dc,
 ) -> ReconcileResult:
-    """
+    r"""
     Run single-pass reconciliation - Bob (corrected) side.
 
     Receives Alice's block parities, identifies mismatches, participates in
@@ -395,7 +395,7 @@ _VERIFY_PONG = b"hbd-verify-pong"
 
 
 def verify_key_alice(dc, aes_key: bytes) -> None:
-    """
+    r"""
     Send a short AES-GCM-authenticated ping; receive and verify Bob's pong.
 
     Failure path (keys differ or any exception): Bob sends an explicit failure
@@ -453,7 +453,7 @@ def verify_key_alice(dc, aes_key: bytes) -> None:
 
 
 def verify_key_bob(dc, aes_key: bytes) -> None:
-    """
+    r"""
     Receive Alice's ping and reply with an authenticated pong.
 
     Robustness: if ANY exception occurs - decrypt failure (InvalidTag), wrong
@@ -492,7 +492,7 @@ def verify_key_bob(dc, aes_key: bytes) -> None:
 
 
 def _make_blocks(n: int, bsz: int) -> list[tuple[int, int]]:
-    """Partition [0, n) into consecutive blocks of size bsz (last may be shorter)."""
+    r"""Partition [0, n) into consecutive blocks of size bsz (last may be shorter)."""
     blocks: list[tuple[int, int]] = []
     i = 0
     while i < n:
@@ -502,15 +502,15 @@ def _make_blocks(n: int, bsz: int) -> list[tuple[int, int]]:
 
 
 def _parity(bits: list[int], lo: int, hi: int) -> int:
-    """XOR parity of bits[lo:hi]."""
+    r"""XOR parity of bits[lo:hi]."""
     return sum(bits[lo:hi]) % 2
 
 
 def _enc_send(dc, msg: dict) -> None:
-    """Encrypt and send a JSON message using the constant reconciliation auth key."""
+    r"""Encrypt and send a JSON message using the constant reconciliation auth key."""
     dc.send(encrypt(json.dumps(msg).encode(), _RECON_AUTH_KEY))
 
 
 def _dec_recv(dc) -> dict:
-    """Receive and decrypt a JSON message from the reconciliation channel."""
+    r"""Receive and decrypt a JSON message from the reconciliation channel."""
     return json.loads(decrypt(dc.recv(), _RECON_AUTH_KEY).decode())

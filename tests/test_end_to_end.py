@@ -26,9 +26,9 @@ No data-shape or field-name mismatch was found between phases.  Specifics:
   In noiseless simulation, bob_results[i] == alice_bits[i] at all matching
   positions, so both nodes derive IDENTICAL AES keys → AES-GCM succeeds.
 
-- MetricsCollector.record_transfer() accesses echo_result.diagnosis (not
-  echo_result.echo_diagnosis), confirmed by hasattr fallback already present
-  in collector.py.
+- MetricsCollector.record_transfer() reads echo_result.echo_diagnosis directly;
+  EchoResult.diagnosis was renamed to echo_diagnosis at the source
+  (transmission/echo_validation.py) and the old hasattr shim removed.
 
 - E91 key generation falls through to BB84 after CHSH check — same key-derivation
   path, same noiseless guarantee → keys match.  Verified here.
@@ -73,6 +73,7 @@ REQUIRED_FIELDS = {
     "transfer_elapsed_s", "throughput_bytes_per_s", "latency_s",
     "echo_outcome", "echo_recovered", "mismatch_source", "echo_diagnosis",
     "retransmit_bytes",
+    "bits_corrected", "bits_sacrificed",
     "fault_injection_enabled", "ber_simulated", "snr_db_simulated",
     "plr_simulated", "bits_injected_errors", "packets_simulated_dropped",
 }

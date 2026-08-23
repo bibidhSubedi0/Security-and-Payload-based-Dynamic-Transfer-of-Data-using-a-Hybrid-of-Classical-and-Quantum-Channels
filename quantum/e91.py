@@ -1,4 +1,4 @@
-"""
+r"""
 E91 Entanglement-Based QKD with CHSH Bell Test
 ===============================================
 
@@ -111,7 +111,7 @@ ANGLE_PAIRS_FOR_CHSH = [
 
 @dataclass
 class E91Result:
-    """
+    r"""
     Result of E91 CHSH Bell test.
 
     ----------
@@ -140,8 +140,8 @@ class E91Result:
 
 
 def _make_singlet() -> QuantumCircuit:
-    """
-    Create |Phi+> Bell state: (|00> + |11>) / $\sqrt(2)$.
+    r"""
+    Create |$\phi$+> Bell state: (|00> + |11>) / $\sqrt(2)$.
 
     -------
     Returns
@@ -158,7 +158,7 @@ def _make_singlet() -> QuantumCircuit:
 
 
 def _measure_at_angle(qc: QuantumCircuit, qubit: int, angle: float, cbit: int) -> None:
-    """
+    r"""
     Rotate qubit so that Z-basis measurement equals measurement at angle.
 
     ----------
@@ -193,7 +193,7 @@ def _run_correlation(
     n_shots: int,
     simulator: AerSimulator,
 ) -> float:
-    """
+    r"""
     Estimate E(a,b) = <A x B> for one angle pair.
 
     ----------
@@ -249,7 +249,7 @@ def run_e91(
     n_pairs_per_setting: int = 500,
     seed: int | None = None,
 ) -> E91Result:
-    """
+    r"""
     Simulate E91 and compute CHSH parameter S.
 
     ----------

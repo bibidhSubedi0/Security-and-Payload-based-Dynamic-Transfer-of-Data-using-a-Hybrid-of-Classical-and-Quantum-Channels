@@ -1,4 +1,4 @@
-"""
+r"""
 BB84 Intercept-Resend Eavesdropper Simulation
 ==============================================
 
@@ -97,7 +97,7 @@ __all__ = ["EveInterceptResult", "run_bb84_with_eve"]
 
 @dataclass
 class EveInterceptResult:
-    """
+    r"""
     Output of run_bb84_with_eve(). Includes Eve's measurement data.
 
     ----------
@@ -145,7 +145,7 @@ class EveInterceptResult:
 
     @property
     def exceeds_abort_threshold(self) -> bool:
-        """True if QBER > BB84_QBER_THRESHOLD (would trigger Phase 2 abort)."""
+        r"""True if QBER > BB84_QBER_THRESHOLD (would trigger Phase 2 abort)."""
         return self.qber > BB84_QBER_THRESHOLD
 
 
@@ -153,7 +153,7 @@ def run_bb84_with_eve(
     n_qubits: int = 200,
     seed: int | None = None,
 ) -> EveInterceptResult:
-    """
+    r"""
     Simulate BB84 with Eve performing a full intercept-resend attack.
 
     ----------

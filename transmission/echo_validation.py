@@ -115,7 +115,7 @@ class EchoResult:
     recovered:         bool                      # True iff success came via reroute
     mismatched_ranges: list[tuple[int, int]] = field(default_factory=list)
     mismatch_source:   str | None = None         # "quantum" | "classical" | "both" | None
-    diagnosis:         str | None = None         # "QUANTUM_CHANNEL_ISSUE" | "POSSIBLE_EAVESDROPPER" | None
+    echo_diagnosis:    str | None = None         # "QUANTUM_CHANNEL_ISSUE" | "POSSIBLE_EAVESDROPPER" | None
     retransmit_bytes:  int = 0                   # bytes sent on retry (0 on clean pass)
 
 
@@ -231,7 +231,7 @@ def _alice_echo_phase(
             recovered=True,
             mismatched_ranges=ranges,
             mismatch_source=source,
-            diagnosis=diagnosis,
+            echo_diagnosis=diagnosis,
             retransmit_bytes=retransmit_bytes,
         )
 

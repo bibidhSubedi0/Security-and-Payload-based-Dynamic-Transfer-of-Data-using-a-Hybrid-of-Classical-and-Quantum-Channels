@@ -6,3 +6,5 @@ pyyaml==6.0.2
 python-json-logger==3.3.0
 pytest==8.3.5
 cryptography==49.0.0
+matplotlib==3.11.1
+plotly==6.9.0

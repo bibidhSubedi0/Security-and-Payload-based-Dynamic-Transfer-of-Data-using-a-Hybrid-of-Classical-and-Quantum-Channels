@@ -249,7 +249,7 @@ def test_echo_clean_pass():
     assert result.success is True
     assert result.recovered is False
     assert result.mismatched_ranges == []
-    assert result.diagnosis is None
+    assert result.echo_diagnosis is None
     assert result.retransmit_bytes == 0
     print(f"\n[clean_pass] success={result.success}, recovered={result.recovered}")
 
@@ -300,7 +300,7 @@ def test_echo_quantum_channel_issue():
 
     assert result.success is True
     assert result.recovered is True
-    assert result.diagnosis == "QUANTUM_CHANNEL_ISSUE"
+    assert result.echo_diagnosis == "QUANTUM_CHANNEL_ISSUE"
     assert result.mismatch_source == "quantum"
     # Only bytes 3–4 were retransmitted (2 bytes), not the full 20
     assert result.retransmit_bytes == 2
@@ -315,7 +315,7 @@ def test_echo_quantum_channel_issue():
     # No CRITICAL security event should have been raised
     assert not sec_handler.records, "Should NOT log a security CRITICAL for QUANTUM_CHANNEL_ISSUE"
 
-    print(f"\n[quantum_issue] diagnosis={result.diagnosis}  "
+    print(f"\n[quantum_issue] diagnosis={result.echo_diagnosis}  "
           f"source={result.mismatch_source}  retransmit={result.retransmit_bytes}B  "
           f"warn_count={len(warn_records)}")
 
@@ -365,7 +365,7 @@ def test_echo_possible_eavesdropper():
 
     assert result.success is True
     assert result.recovered is True
-    assert result.diagnosis == "POSSIBLE_EAVESDROPPER"
+    assert result.echo_diagnosis == "POSSIBLE_EAVESDROPPER"
     assert result.mismatch_source == "quantum"
     assert result.retransmit_bytes < len(payload), "Must retransmit only the mismatch, not full payload"
 
@@ -387,7 +387,7 @@ def test_echo_possible_eavesdropper():
         "not to main logger (WARNING)"
     )
 
-    print(f"\n[eavesdropper] diagnosis={result.diagnosis}  "
+    print(f"\n[eavesdropper] diagnosis={result.echo_diagnosis}  "
           f"source={result.mismatch_source}  retransmit={result.retransmit_bytes}B")
     print(f"  CRITICAL security record: {crit_msg!r}")
     print(f"  Logger name: {crit_records[0].name!r}  Level: {crit_records[0].levelname!r}")

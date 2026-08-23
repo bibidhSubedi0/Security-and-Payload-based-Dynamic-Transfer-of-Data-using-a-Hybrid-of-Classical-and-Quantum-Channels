@@ -1,6 +1,9 @@
 """Tests for E91 entanglement-based QKD and CHSH inequality."""
 
 import math
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+
 from quantum.e91 import run_e91
 
 
