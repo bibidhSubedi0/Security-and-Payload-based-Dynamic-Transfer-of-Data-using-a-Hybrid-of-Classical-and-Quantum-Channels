@@ -41,23 +41,13 @@ import json
 import pathlib
 import socket
 import tempfile
-import threading
-import time
-import uuid
 
 import pytest
 
 import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from classical.aes_channel import derive_key
-from classical.transport import DataChannel
-from metrics.collector import MetricsCollector
-from node.node import Node
-from server.ebit_server import EbitServer
-from split_controller.controller import compute_split
-from transmission.echo_validation import alice_transfer, bob_transfer
-from transmission.payload_splitter import split_payload
+from quantum_demo.pipeline import run_session
 
 
 # ---------------------------------------------------------------------------
@@ -119,132 +109,21 @@ def _run_full_pipeline(
     log_path: pathlib.Path,
 ) -> tuple[bytes, dict]:
     """
-    Run the complete pipeline from server startup to metrics record.
+    Run the complete pipeline from server startup to metrics record via the
+    extracted quantum_demo.pipeline.run_session() module.
 
     Returns (bob_final_payload, json_record_dict).
-    Raises on any threading error.
     """
-    server = EbitServer(config)
-    server.start()
-    server.ready.wait(timeout=5)
+    result = run_session(config, payload=payload, metrics_log_path=log_path)
 
-    node_a = Node("A", config)
-    node_b = Node("B", config)
+    if result.outcome != "CLEAN_PASS":
+        raise RuntimeError(
+            f"Pipeline outcome {result.outcome}: {result.abort_reason}"
+        )
 
-    errors: dict = {}
-    b_registered     = threading.Event()
-    b_channels_ready = threading.Event()
-
-    bob_final:   list = [None]
-    echo_result_h: list = [None]
-    qkd_elapsed_h: list = [0.0]
-    xfer_elapsed_h: list = [0.0]
-    node_a_ref:  list = [None]
-    decision_h:  list = [None]
-    split_h:     list = [None]
-
-    def run_b():
-        try:
-            node_b.connect()
-            node_b.register()
-            b_registered.set()
-            node_b.wait_for_connection()
-            node_b.run_qkd()
-            aes_key = derive_key(node_b.session.key)
-
-            c_dc = DataChannel(config["host"], config["data_port"])
-            q_dc = DataChannel(config["host"], config["quantum_port"])
-            c_dc.listen(); q_dc.listen()
-            b_channels_ready.set()
-            c_dc.accept(); q_dc.accept()
-
-            bob_final[0] = bob_transfer(node_b, c_dc, q_dc, aes_key)
-            c_dc.close(); q_dc.close()
-        except Exception as exc:
-            errors["B"] = exc
-            b_registered.set()
-            b_channels_ready.set()
-        finally:
-            node_b.close()
-
-    def run_a():
-        try:
-            b_registered.wait(timeout=10)
-            if "B" in errors:
-                return
-
-            node_a.connect()
-            node_a.register()
-            node_a.wait_for_peer("B", timeout=10)
-            node_a.request_connection("B")
-
-            t0 = time.monotonic()
-            node_a.run_qkd()
-            qkd_elapsed_h[0] = time.monotonic() - t0
-
-            aes_key = derive_key(node_a.session.key)
-            b_channels_ready.wait(timeout=10)
-
-            c_dc = DataChannel(config["host"], config["data_port"])
-            q_dc = DataChannel(config["host"], config["quantum_port"])
-            c_dc.connect(); q_dc.connect()
-
-            decision = compute_split(
-                security_level=config["security_level"],
-                payload_size_bytes=len(payload),
-                available_ebits=config["available_ebits"],
-                qber=node_a.session.qber,
-            )
-            decision_h[0] = decision
-            split_h[0]    = split_payload(payload, decision)
-
-            t1 = time.monotonic()
-            result = alice_transfer(
-                node_a, payload, decision, c_dc, q_dc, aes_key,
-                config["available_ebits"], node_a.session.qber,
-            )
-            xfer_elapsed_h[0] = time.monotonic() - t1
-            echo_result_h[0]  = result
-            node_a_ref[0]     = node_a
-
-            c_dc.close(); q_dc.close()
-        except Exception as exc:
-            errors["A"] = exc
-        finally:
-            node_a.close()
-
-    tb = threading.Thread(target=run_b, daemon=True)
-    ta = threading.Thread(target=run_a, daemon=True)
-    tb.start(); ta.start()
-    tb.join(timeout=120); ta.join(timeout=120)
-    server.stop()
-
-    if errors:
-        raise RuntimeError(f"Pipeline errors: {errors}")
-
-    node_a    = node_a_ref[0]
-    decision  = decision_h[0]
-    split     = split_h[0]
-
-    # Write metrics record
-    collector = MetricsCollector(log_path)
-    rec = collector.record_transfer(
-        session_id        = str(uuid.uuid4()),
-        protocol          = config["protocol"],
-        qber              = node_a.session.qber,
-        chsh              = node_a.session.chsh,
-        qkd_key_bits      = len(node_a.session.key),
-        qkd_elapsed_s     = qkd_elapsed_h[0],
-        decision          = decision,
-        payload_bytes     = len(payload),
-        quantum_bytes     = split.quantum_len,
-        classical_bytes   = split.classical_len,
-        transfer_elapsed_s = xfer_elapsed_h[0],
-        echo_result       = echo_result_h[0],
-    )
-
-    obj = json.loads(log_path.read_text().strip().splitlines()[-1])
-    return bob_final[0], obj
+    # Read back the metrics record that run_session persisted
+    obj = json.loads(pathlib.Path(log_path).read_text().strip().splitlines()[-1])
+    return result.bob_payload, obj
 
 
 # ---------------------------------------------------------------------------
