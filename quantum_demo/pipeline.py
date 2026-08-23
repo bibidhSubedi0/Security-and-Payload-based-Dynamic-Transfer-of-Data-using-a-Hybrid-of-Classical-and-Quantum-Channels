@@ -91,15 +91,22 @@ class _CaptureHandler(logging.Handler):
 
 def _attach_capture(handler: logging.Handler) -> list:
     """
-    Attach handler to every named logger.
+    Attach handler to every project logger.
 
     get_logger() sets propagate=False on each module logger, so attaching to
     the root logger alone would capture nothing. loggerDict holds every name
     get_logger() has ever created; getLogger(name) materializes placeholders.
     Returns the list of loggers we touched so they can be restored.
+
+    NOTE: all sessions share logger names, so two CONCURRENT run_session()
+    calls will each capture the other's lines. Fine for the single-user demo
+    (the UI disables Run while in flight); do not rely on per-session log
+    isolation under parallel load.
     """
     touched = []
     for name in list(logging.root.manager.loggerDict) + [None]:
+        if name and name.startswith(("uvicorn", "anyio", "watchfiles", "multiprocessing")):
+            continue  # server framework noise, not pipeline events
         lg = logging.getLogger(name) if name else logging.getLogger()
         lg.addHandler(handler)
         touched.append(lg)
