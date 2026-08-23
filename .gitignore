@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .venv/
 node_modules/
+demo-frontend/node_modules/
+demo-frontend/dist/
