@@ -1,4 +1,4 @@
-"""
+r"""
 BB84 Prepare-and-Measure Quantum Key Distribution
 =================================================
 
@@ -100,7 +100,7 @@ from qiskit_aer import AerSimulator
 
 @dataclass
 class BB84Result:
-    """
+    r"""
     Result of a complete BB84 simulation run.
 
     ----------
@@ -126,7 +126,7 @@ class BB84Result:
         Range [0, 1]. If > BB84_QBER_THRESHOLD (0.11), session should be aborted.
     qber_sample_size : int
         Number of sifted bits used for QBER estimation (the check sample).
-        Determines statistical confidence: $\sigma$ ≈ √(qber*(1-qber)/qber_sample_size).
+        Determines statistical confidencer: $\sigma$ ≈ √(qber*(1-qber)/qber_sample_size).
     """
 
     alice_bits: list[int]
@@ -152,7 +152,7 @@ BB84_CHECK_FRACTION: float = 0.75
 
 
 def _prepare_qubit(bit: int, basis: int) -> QuantumCircuit:
-    """
+    r"""
     Prepare a single qubit encoding `bit` in the specified `basis`.
 
     ----------
@@ -190,7 +190,7 @@ def _prepare_qubit(bit: int, basis: int) -> QuantumCircuit:
 
 
 def _measure_qubit(qc: QuantumCircuit, basis: int) -> QuantumCircuit:
-    """
+    r"""
     Append measurement in the specified basis to an existing circuit.
 
     ----------
@@ -227,7 +227,7 @@ def run_bb84(
     seed: int | None = None,
     check_fraction: float = BB84_CHECK_FRACTION,
 ) -> BB84Result:
-    """
+    r"""
     Execute a complete BB84 protocol simulation.
 
     ----------

@@ -153,6 +153,7 @@ def run_one_transfer(
     xfer_elapsed_h:      list = [0.0]
     decision_h:          list = [None]
     split_h:             list = [None]
+    recon_bob_h:         list = [None]
     session_aborted:     list = [False]
     recon_incomplete:    list = [False]
 
@@ -176,6 +177,7 @@ def run_one_transfer(
             # Reconciliation: correct residual bit errors before HKDF
             qber = max(node_b.session.qber, 1e-4)
             recon = reconcile_bob(node_b.session.key, qber, c_dc)
+            recon_bob_h[0] = recon   # Bob's view: bits_corrected is meaningful
             if not recon.reconciled_bits:
                 raise ReconciliationIncompleteError(
                     "No bits remain after privacy amplification"
@@ -304,6 +306,7 @@ def run_one_transfer(
         "xfer_elapsed_s":   xfer_elapsed_h[0],
         "decision":         decision_h[0],
         "split":            split_h[0],
+        "recon_bob":        recon_bob_h[0],
         "injector":         injector,
     }
 
@@ -335,6 +338,30 @@ def main() -> None:
               "RECONCILIATION_INCOMPLETE": 0,
               "KEY_MISMATCH_ERROR": 0, "ERROR": 0, "TIMEOUT": 0}
     sweep_start = time.monotonic()
+    records_written = 0
+
+    def log_failure(outcome: str) -> None:
+        """
+        Persist one failure record so failed transfers appear in the .jsonl
+        too (previously they only incremented console counters, giving the
+        log survivorship bias: success rate read as 100% by construction).
+        Fields unknown at the failure point stay at neutral defaults.
+        """
+        nonlocal records_written
+        try:
+            collector.record_failure(
+                session_id         = session_id,
+                outcome            = outcome,
+                payload_bytes      = psz,
+                decision           = r.get("decision"),
+                quantum_bytes      = r["split"].quantum_len if r.get("split") else 0,
+                classical_bytes    = r["split"].classical_len if r.get("split") else 0,
+                transfer_elapsed_s = r.get("xfer_elapsed_s", 0.0),
+                fault_injector     = r.get("injector"),
+            )
+            records_written += 1
+        except Exception as exc:
+            print(f"  [WARNING] MetricsCollector write failed: {exc}", flush=True)
 
     for idx, (sec, (psz, plabel), (noise, nlabel), (fcfg, flabel)) in enumerate(configs, 1):
         payload         = bytes(i % 256 for i in range(psz))
@@ -380,18 +407,21 @@ def main() -> None:
                   f"(tb_alive={r['tb_alive']} ta_alive={r['ta_alive']}  "
                   f"errors={r['errors']}  "
                   f"q_xfer={q_dur:.3f}s  c_xfer={c_dur:.4f}s)", flush=True)
+            log_failure("TIMEOUT")
             continue
 
         if r["aborted"]:
             outcome = "SESSION_ABORTED"
             counts[outcome] += 1
             print(f"  → {outcome:<22s} ({elapsed:.2f}s)", flush=True)
+            log_failure(outcome)
             continue
 
         if r["recon_incomplete"]:
             outcome = "RECONCILIATION_INCOMPLETE"
             counts[outcome] += 1
             print(f"  → {outcome:<22s} ({elapsed:.2f}s)", flush=True)
+            log_failure(outcome)
             continue
 
         if r["errors"]:
@@ -404,6 +434,7 @@ def main() -> None:
                 outcome = "ERROR"
             counts[outcome] += 1
             print(f"  → {outcome}: {r['errors']} ({elapsed:.2f}s)", flush=True)
+            log_failure(outcome)
             continue
 
         er   = r["echo_result"]
@@ -437,7 +468,10 @@ def main() -> None:
                 transfer_elapsed_s = r["xfer_elapsed_s"],
                 echo_result       = er,
                 fault_injector    = r["injector"],
+                bits_corrected    = r["recon_bob"].bits_corrected if r["recon_bob"] else None,
+                bits_sacrificed   = r["recon_bob"].bits_sacrificed if r["recon_bob"] else None,
             )
+            records_written += 1
         except Exception as exc:
             print(f"  [WARNING] MetricsCollector write failed: {exc}", flush=True)
 
@@ -451,9 +485,6 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # Summary
     # -----------------------------------------------------------------------
-    successful = sum(
-        counts[k] for k in ("CLEAN_PASS", "RECOVERED_VIA_REROUTE", "CHANNEL_FAILURE")
-    )
     print(f"\n{'='*62}", flush=True)
     print(f"  Benchmark complete", flush=True)
     print(f"  Configurations: {total}", flush=True)
@@ -469,7 +500,8 @@ def main() -> None:
     print(f"  TIMEOUT:              {counts['TIMEOUT']:3d}  "
           f"(hung >60s — unexpected; socket fix should eliminate these)", flush=True)
     print(f"  ERROR:                {counts['ERROR']:3d}", flush=True)
-    print(f"  Records written:      {successful}", flush=True)
+    print(f"  Records written:      {records_written:3d}  "
+          f"(successes + failures)", flush=True)
     print(f"  Elapsed:              {total_elapsed:.1f}s", flush=True)
     print(f"  Log: {log_path.relative_to(_PROJECT_ROOT)}", flush=True)
     print(f"{'='*62}\n", flush=True)

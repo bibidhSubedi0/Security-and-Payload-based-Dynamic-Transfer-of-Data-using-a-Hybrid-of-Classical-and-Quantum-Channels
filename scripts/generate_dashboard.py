@@ -374,6 +374,69 @@ def fig5_skr_vs_qber(records: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Fig 4 — Reconciliation bits corrected / sacrificed
+# ---------------------------------------------------------------------------
+
+def fig4_reconciliation(records: list[dict]) -> dict | None:
+    """
+    Render Fig 4 PNG (metrics/figures/fig4_reconciliation_bits.png) and return
+    aggregate Cascade reconciliation stats per noise group.
+
+    Grouped bars: mean bits_corrected vs bits_sacrificed per noise group,
+    latest-run records only (protocol-consistent reconciliation behaviour).
+    Returns None when no record carries the schema-1.1 fields (legacy logs);
+    callers must handle None by reporting the skip note.
+    """
+    recs = [r for r in records if r.get("bits_corrected") is not None]
+    if not recs:
+        print(f"  [SKIP] {(_FIG_DIR / 'fig4_reconciliation_bits.png').relative_to(_ROOT)} "
+              f"— no schema-1.1 records (re-run benchmark to populate)")
+        return None
+    groups = ("0.00 (noiseless)", "0.05 (moderate)")
+    labels = ["0.00 (noiseless)", "0.05 (moderate)"]
+
+    def mean_of(field: str, group: str) -> float:
+        vals = [r[field] for r in recs if r["noise_group"] == group]
+        return float(np.mean(vals)) if vals else 0.0
+
+    corr_means = [mean_of("bits_corrected", g) for g in groups]
+    sac_means = [mean_of("bits_sacrificed", g) for g in groups]
+
+    # Static PNG alongside the other figures
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    x = np.arange(len(labels))
+    width = 0.35
+    b1 = ax.bar(x - width / 2, corr_means, width,
+                label="bits_corrected (Cascade)", color="#9b59b6")
+    b2 = ax.bar(x + width / 2, sac_means, width,
+                label="bits_sacrificed (privacy amp.)", color="#95a5a6")
+    for bars in (b1, b2):
+        for rect in bars:
+            ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height(),
+                    f"{rect.get_height():.1f}",
+                    ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Mean bits per transfer")
+    ax.set_title("Fig 4 — Reconciliation Bits Corrected / Sacrificed\n(latest run, Bob-side Cascade view)")
+    ax.legend()
+    ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    out = _FIG_DIR / "fig4_reconciliation_bits.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  [OK] {out.relative_to(_ROOT)}")
+
+    return {
+        "n": len(recs),
+        "corr_noiseless": corr_means[0],
+        "corr_moderate": corr_means[1],
+        "sac_noiseless": sac_means[0],
+        "sac_moderate": sac_means[1],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Fig 6 — Throughput and latency by payload size
 # ---------------------------------------------------------------------------
 
@@ -445,12 +508,16 @@ def fig6_throughput_latency(records: list[dict]) -> dict:
 def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
     """
     Produce a single self-contained HTML file with interactive Plotly charts.
-    Five panels (Charts 1, 2, 3, 5, 6).  Charts 4 and 7 are omitted with a note.
+    Six panels (Charts 1, 2, 3, 5, 6 plus Fig 4 when reconciliation fields
+    are present in the records).  Chart 7 is omitted with a note.
     """
 
     # ---- Panel dimensions ----
+    # Row 4 (Fig 4) only carries data for schema >= 1.1 records; for legacy
+    # logs the panel stays empty and the footnote explains why.
     fig = make_subplots(
-        rows=3, cols=2,
+        rows=4, cols=2,
+        specs=[[{}, {}], [{}, {}], [{}, {}], [{"colspan": 2}, None]],
         subplot_titles=[
             "Fig 1 — Measured QBER vs Injected Noise",
             "Fig 2 — Outcome Breakdown by Noise Level (latest run, 54 configs)",
@@ -458,8 +525,9 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
             "Fig 5 — Secret Key Rate vs Measured QBER",
             "Fig 6a — Throughput by Payload Size",
             "Fig 6b — End-to-end Latency by Payload Size",
+            "Fig 4 — Reconciliation Bits Corrected / Sacrificed (latest run)",
         ],
-        vertical_spacing=0.14,
+        vertical_spacing=0.11,
         horizontal_spacing=0.10,
     )
 
@@ -583,6 +651,40 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         legendgroup="lat",
     ), row=3, col=2)
 
+    # ---- Fig 4 — reconciliation stats (schema >= 1.1 records only) ----
+    recon_recs = [r for r in latest if r.get("bits_corrected") is not None]
+    if recon_recs:
+        groups = ["0.00 (noiseless)", "0.05 (moderate)"]
+        labels = ["0.00<br>(noiseless)", "0.05<br>(moderate)"]
+        corr_means = [
+            np.mean([r["bits_corrected"] for r in recon_recs if r["noise_group"] == g] or [0])
+            for g in groups
+        ]
+        sac_means = [
+            np.mean([r["bits_sacrificed"] for r in recon_recs if r["noise_group"] == g] or [0])
+            for g in groups
+        ]
+        fig.add_trace(go.Bar(
+            x=labels, y=corr_means, name="bits_corrected (Cascade)",
+            marker_color="#9b59b6",
+            text=[f"{v:.1f}" for v in corr_means], textposition="outside",
+            legendgroup="recon_corr",
+        ), row=4, col=1)
+        fig.add_trace(go.Bar(
+            x=labels, y=sac_means, name="bits_sacrificed (privacy amp.)",
+            marker_color="#95a5a6",
+            text=[f"{v:.1f}" for v in sac_means], textposition="outside",
+            legendgroup="recon_sac",
+        ), row=4, col=1)
+    else:
+        # Legacy logs without schema 1.1 fields: keep the panel but explain.
+        fig.add_annotation(
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            text=("Fig 4: bits_corrected / bits_sacrificed absent in this log "
+                  "(pre-1.1 schema run). Re-run the benchmark to populate."),
+            showarrow=False, font=dict(size=11, color="#666666"),
+        )
+
     # ---- Layout ----
     fig.update_layout(
         title=dict(
@@ -593,7 +695,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
             x=0.5,
             font=dict(size=16),
         ),
-        height=1100,
+        height=1400,
         legend=dict(orientation="v", x=1.02, y=1, font=dict(size=10)),
         template="plotly_white",
     )
@@ -606,16 +708,19 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
     fig.update_yaxes(title_text="SKR (bits/s)", row=2, col=2)
     fig.update_yaxes(title_text="Throughput (B/s)", row=3, col=1)
     fig.update_yaxes(title_text="Latency (s)", row=3, col=2)
+    fig.update_yaxes(title_text="Mean bits", row=4, col=1)
 
-    # Add annotation for skipped charts
+    # Footnote: only mention charts genuinely unavailable for THIS log.
+    skipped = []
+    if not recon_recs:
+        pass   # Fig 4 already annotated in-panel above
+    skipped.append(
+        "Fig 7 (CHSH/E91) — all sessions used BB84 (chsh=null for all records)."
+    )
     fig.add_annotation(
         x=0.5, y=-0.06,
         xref="paper", yref="paper",
-        text=(
-            "<b>Charts not shown:</b> "
-            "Fig 4 (Reconciliation bits_corrected/sacrificed) — fields not written to log file; "
-            "Fig 7 (CHSH/E91) — all sessions used BB84 (chsh=null for all records)."
-        ),
+        text="<b>Charts not shown:</b> " + " ".join(skipped),
         showarrow=False,
         font=dict(size=10, color="#666666"),
         align="center",
@@ -641,6 +746,7 @@ def print_summary(
     fig1_stats: dict,
     fig2_stats: dict,
     fig3_stats: dict,
+    fig4_stats: dict | None,
     fig5_stats: dict,
     fig6_stats: dict,
 ) -> None:
@@ -668,8 +774,17 @@ def print_summary(
     print(f"  [Fig 3] Split ratio — mean quantum fractions: "
           f"low={frac['low']:.2f}, medium={frac['medium']:.2f}, high={frac['high']:.2f}, "
           f"matching the 0.25/0.50/0.75 target policy precisely.")
-    print(f"  [Fig 4] SKIPPED — bits_corrected / bits_sacrificed not written to log "
-          f"(reconciliation runs before MetricsCollector is called).")
+    if fig4_stats is not None:
+        print(f"  [Fig 4] Reconciliation — Cascade corrections: "
+              f"noiseless={fig4_stats['corr_noiseless']:.1f} bits, "
+              f"moderate={fig4_stats['corr_moderate']:.1f} bits; "
+              f"sacrificed (privacy amp.): "
+              f"noiseless={fig4_stats['sac_noiseless']:.1f}, "
+              f"moderate={fig4_stats['sac_moderate']:.1f} "
+              f"(n={fig4_stats['n']} schema-1.1 records).")
+    else:
+        print(f"  [Fig 4] SKIPPED — bits_corrected / bits_sacrificed absent in this log "
+              f"(pre-1.1 schema run); re-run the benchmark to populate.")
     print(f"  [Fig 5] SKR vs QBER — SKR range {fig5_stats['skr_min']:.1f}–{fig5_stats['skr_max']:.1f} bits/s; "
           f"higher QBER correlates with more sifting loss → lower SKR as expected.")
     sizes = fig6_stats["payload_sizes"]
@@ -745,6 +860,7 @@ def main() -> None:
     fig3_stats = fig3_split_ratio(all_records)
     fig5_stats = fig5_skr_vs_qber(latest)      # latest run only — protocol-consistent timing
     fig6_stats = fig6_throughput_latency(latest)  # latest run only — protocol-consistent timing
+    fig4_stats = fig4_reconciliation(latest)   # latest run only; None for legacy logs
 
     print("\n  Generating interactive HTML (plotly):")
     build_html_dashboard(all_records, latest)
@@ -752,7 +868,7 @@ def main() -> None:
     spot_check(latest)
     print_summary(
         all_records, latest, ts_start, ts_end,
-        fig1_stats, fig2_stats, fig3_stats, fig5_stats, fig6_stats,
+        fig1_stats, fig2_stats, fig3_stats, fig4_stats, fig5_stats, fig6_stats,
     )
 
 
