@@ -8,3 +8,5 @@ pytest==8.3.5
 cryptography==49.0.0
 matplotlib==3.11.1
 plotly==6.9.0
+fastapi==0.141.1
+uvicorn==0.52.4
