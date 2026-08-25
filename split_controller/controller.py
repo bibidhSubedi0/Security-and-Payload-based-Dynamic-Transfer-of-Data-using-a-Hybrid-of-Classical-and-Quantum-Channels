@@ -1,14 +1,15 @@
 """
-Dynamic Split Controller — Phase 4
-===================================
+Dynamic Split Controller (Phase 4)
+==================================
 Implements Fig. 4 of the project proposal (§6.2.3).
 
 Given the current channel state and security preference, this module decides what
 fraction of the payload to route over the quantum channel (superdense coding) versus
-the classical channel (AES-256-GCM over TCP).  It produces a *decision* only — it
+the classical channel (AES-256-GCM over TCP).  It produces a *decision* only; it
 does not transmit anything (that is Phase 5).
 
-Decision tree
+-------------
+Decision Tree
 -------------
 1. Sufficient ebits?       available_ebits < MIN_VIABLE_EBITS → 100 % classical
 2. QBER acceptable?        qber > QBER_THRESHOLD               → 100 % classical
@@ -19,10 +20,11 @@ Decision tree
                sufficient → MAX_QUANTUM_FRACTION
                constrained → min(ebit_capacity / payload_bits, MAX_QUANTUM_FRACTION)
 
+------------------
 Constant rationale
 ------------------
 MIN_VIABLE_EBITS = 4
-    4 ebits × 2 bits/ebit = 8 bits = 1 byte.  Anything smaller cannot form a
+    4 ebits * 2 bits/ebit = 8 bits = 1 byte.  Anything smaller cannot form a
     useful quantum payload unit; the quantum-channel setup overhead would dominate.
 
 BITS_PER_EBIT = 2
@@ -47,11 +49,12 @@ MAX_QUANTUM_FRACTION = 0.75
           "hybrid" premise of the project.
     0.75 is quantum-dominant while preserving the classical fallback.
 
+-----------------------------------------------------
 Ebit-capacity formula ("sufficient for full payload")
-------------------------------------------------------
-    payload_bits      = payload_size_bytes × 8
-    ebits_needed      = payload_bits / BITS_PER_EBIT   (= payload_size_bytes × 4)
-    ebit_capacity_bits = available_ebits × BITS_PER_EBIT
+-----------------------------------------------------
+    payload_bits      = payload_size_bytes * 8
+    ebits_needed      = payload_bits / BITS_PER_EBIT   (= payload_size_bytes * 4)
+    ebit_capacity_bits = available_ebits * BITS_PER_EBIT
 
 If ebit_capacity_bits ≥ payload_bits → return MAX_QUANTUM_FRACTION.
 Otherwise → quantum_fraction = ebit_capacity_bits / payload_bits,
@@ -63,13 +66,14 @@ All constants are module-level named values and can be overridden via the
 
 from __future__ import annotations
 
+import math
 import sys
 import pathlib
 from dataclasses import dataclass
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from quantum.bb84 import BB84_QBER_THRESHOLD   # 0.11 — single authoritative source
+from quantum.bb84 import BB84_QBER_THRESHOLD   # 0.11, single authoritative source
 
 # ---------------------------------------------------------------------------
 # Named constants (all sweepable via thresholds= parameter)
@@ -82,6 +86,8 @@ QUANTUM_FRACTION_LOW:    float = 0.25   # "low"    security quantum share
 QUANTUM_FRACTION_MEDIUM: float = 0.50   # "medium" security quantum share
 MAX_QUANTUM_FRACTION:    float = 0.75   # "high"   security ceiling (see rationale above)
 
+# Accepted values of compute_split()'s security_level parameter;
+# anything else raises ValueError at the trust boundary.
 VALID_SECURITY_LEVELS = frozenset({"low", "medium", "high"})
 
 
@@ -94,8 +100,26 @@ class SplitDecision:
     """
     Output of compute_split().
 
-    quantum_fraction + classical_fraction == 1.0 always.
-    reason is a short uppercase token suitable for structured logging in Phase 7.
+    ----------
+    Attributes
+    ----------
+    quantum_fraction : float
+        Share of payload routed via superdense coding over the quantum
+        channel, in [0, 1].
+    classical_fraction : float
+        Complement share sent AES-256-GCM encrypted over the classical
+        channel; quantum_fraction + classical_fraction == 1.0 always
+        (enforced in __post_init__).
+    reason : str
+        One of the REASON_* tokens below: short uppercase strings suitable
+        for structured logging (Phase 7) and metrics grouping
+        (generate_dashboard.py maps them back to coarse levels).
+
+    -----
+    Notes
+    -----
+    Frozen so a decision cannot be mutated after the fact; tests and the
+    benchmark rely on decisions being immutable records.
     """
     quantum_fraction:  float
     classical_fraction: float
@@ -111,7 +135,11 @@ class SplitDecision:
             raise ValueError(f"quantum_fraction out of [0,1]: {self.quantum_fraction}")
 
 
-# Reason tokens (use these constants in tests/Phase 7 to avoid typos)
+# Reason tokens: the complete outcome vocabulary of a split decision.
+# EBIT_INSUFFICIENT / QBER_EXCEEDED  -> forced 100% classical (degraded mode)
+# LOW/MEDIUM/HIGH_SECURITY_*         -> policy-driven split
+# HIGH_SECURITY_CONSTRAINED          -> high security, capped by ebit budget
+# Use these constants in tests/consumers to avoid typo drift.
 REASON_EBIT_INSUFFICIENT      = "EBIT_INSUFFICIENT"
 REASON_QBER_EXCEEDED          = "QBER_EXCEEDED"
 REASON_LOW_SECURITY           = "LOW_SECURITY"
@@ -134,42 +162,57 @@ def compute_split(
     """
     Compute the quantum/classical payload split ratio.
 
+    ----------
     Parameters
     ----------
     security_level    : "low" | "medium" | "high"
     payload_size_bytes: total payload size in bytes
     available_ebits   : number of ebits currently held by this session
-    qber              : measured QBER from the QKD phase (0.0–1.0)
+    qber              : measured QBER from the QKD phase (0.0-1.0)
     thresholds        : optional dict of override values for any named constant;
                         keys match the module-level constant names (lowercase):
                         "min_viable_ebits", "qber_threshold",
                         "quantum_fraction_low", "quantum_fraction_medium",
                         "max_quantum_fraction", "bits_per_ebit"
 
+    -------
     Returns
     -------
     SplitDecision with quantum_fraction, classical_fraction, and a reason token.
 
+    ------
     Raises
     ------
-    ValueError if security_level is not one of "low", "medium", "high".
+    ValueError if security_level is not one of "low", "medium", "high", or if
+    numeric inputs are out of range: qber must be finite in [0, 1] (a NaN
+    comparison is always False, so an unvalidated NaN would silently pass the
+    security check), payload_size_bytes >= 1, available_ebits >= 0.
     """
     if security_level not in VALID_SECURITY_LEVELS:
         raise ValueError(
             f"Unknown security_level {security_level!r}. "
             f"Must be one of {sorted(VALID_SECURITY_LEVELS)}."
         )
+    # Numeric validation at the trust boundary: callers feed user-supplied
+    # demo/benchmark values straight into this function.
+    if not (isinstance(qber, (int, float)) and math.isfinite(qber)
+            and 0.0 <= qber <= 1.0):
+        raise ValueError(f"qber must be a finite value in [0, 1], got {qber!r}")
+    if payload_size_bytes < 1:
+        raise ValueError(f"payload_size_bytes must be >= 1, got {payload_size_bytes}")
+    if available_ebits < 0:
+        raise ValueError(f"available_ebits must be >= 0, got {available_ebits}")
 
     t = _resolve_thresholds(thresholds)
 
     # ------------------------------------------------------------------
-    # Step 1 — Sufficient ebits?
+    # Step 1: Sufficient ebits?
     # ------------------------------------------------------------------
     if available_ebits < t["min_viable_ebits"]:
         return _classical(REASON_EBIT_INSUFFICIENT)
 
     # ------------------------------------------------------------------
-    # Step 2 — QBER within acceptable threshold?
+    # Step 2: QBER within acceptable threshold?
     # (strictly greater-than: QBER == threshold is still considered secure,
     #  consistent with ebit_server.py's  `secure = qber <= BB84_QBER_THRESHOLD`)
     # ------------------------------------------------------------------
@@ -177,7 +220,7 @@ def compute_split(
         return _classical(REASON_QBER_EXCEEDED)
 
     # ------------------------------------------------------------------
-    # Step 3 — Security level branch
+    # Step 3: Security level branch
     # ------------------------------------------------------------------
     if security_level == "low":
         q = t["quantum_fraction_low"]
@@ -206,6 +249,26 @@ def compute_split(
 # ---------------------------------------------------------------------------
 
 def _resolve_thresholds(overrides: dict | None) -> dict:
+    """
+    Merge module-level defaults with caller overrides.
+
+    ----------
+    Parameters
+    ----------
+    overrides : dict | None
+        Keys match the lowercase names below (e.g. "min_viable_ebits").
+        Unknown keys raise ValueError immediately: a typo'd key would
+        otherwise fail silently and the sweep would benchmark the default
+        policy while believing it overrode it. Exists so Phase 8 benchmark
+        sweeps can probe alternate policies without editing this module.
+
+    -------
+    Returns
+    -------
+    dict
+        Fresh merged mapping; the module constants themselves are never
+        mutated.
+    """
     defaults = {
         "min_viable_ebits":        MIN_VIABLE_EBITS,
         "qber_threshold":          BB84_QBER_THRESHOLD,
@@ -215,16 +278,28 @@ def _resolve_thresholds(overrides: dict | None) -> dict:
         "bits_per_ebit":           BITS_PER_EBIT,
     }
     if overrides:
+        unknown = set(overrides) - set(defaults)
+        if unknown:
+            raise ValueError(
+                f"Unknown threshold key(s) {sorted(unknown)}; "
+                f"valid keys are {sorted(defaults)}."
+            )
         defaults.update(overrides)
     return defaults
 
 
 def _classical(reason: str) -> SplitDecision:
+    """Degraded-mode decision: everything on the classical channel."""
     return SplitDecision(quantum_fraction=0.0, classical_fraction=1.0, reason=reason)
 
 
 def _split(q: float, reason: str) -> SplitDecision:
-    # Compute classical as complement to avoid independent rounding drift
+    """
+    Build a policy-driven decision for quantum share `q`.
+
+    Classical fraction is computed as the complement (not stored
+    independently) so rounding can never make the pair drift apart.
+    """
     return SplitDecision(
         quantum_fraction=q,
         classical_fraction=1.0 - q,

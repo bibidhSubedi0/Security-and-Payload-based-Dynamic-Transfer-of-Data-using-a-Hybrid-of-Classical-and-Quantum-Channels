@@ -1,5 +1,5 @@
 """
-Echo validation + adaptive rerouting — Phase 6
+Echo validation + adaptive rerouting (Phase 6)
 
 Protocol
 --------
@@ -31,7 +31,7 @@ Mismatch path:
        AES-GCM channel (not the full payload, not the quantum channel).
     5. Bob applies the patch and echoes the patched range back.
     6. Alice verifies the re-echo.
-         Match  → EchoResult(success=True, recovered=True) — RECOVERED_VIA_REROUTE
+         Match  → EchoResult(success=True, recovered=True) i.e. RECOVERED_VIA_REROUTE
          Still bad → raise ChannelFailureError (one retry, then abort)
 
 Wire protocol (all frames over classical_dc, all AES-GCM encrypted):
@@ -70,7 +70,7 @@ __all__ = [
 
 ANOMALY_THRESHOLD: float = 0.05
 """
-QBER threshold for mismatch diagnosis — below the 0.11 session-abort floor.
+QBER threshold for mismatch diagnosis, below the 0.11 session-abort floor.
 
   QBER ≤ 0.05  + mismatch → POSSIBLE_EAVESDROPPER   (suspicious: low noise, still corrupt)
   0.05 < QBER ≤ 0.11      → QUANTUM_CHANNEL_ISSUE    (degraded channel, not yet aborting)
@@ -86,7 +86,7 @@ logger = get_logger("echo_validation")
 # Security events use a *separate* named logger at CRITICAL level.
 # In the JSON log stream this produces lines with
 #   "levelname": "CRITICAL"  and  "name": "echo_validation.SECURITY"
-# — visually unmistakable compared to the INFO / WARNING lines from the
+#   stands out unmistakably against the INFO / WARNING lines from the
 # main logger above.
 _security_logger = get_logger("echo_validation.SECURITY", level=logging.CRITICAL)
 
@@ -109,7 +109,28 @@ class ChannelFailureError(Exception):
 
 @dataclass
 class EchoResult:
-    """Outcome of the alice_transfer() call."""
+    """
+    Outcome of the alice_transfer() call.
+
+    ----------
+    Attributes
+    ----------
+    success : bool
+        True when Alice holds proof (clean echo or verified re-echo) that
+        Bob's payload matches hers.
+    recovered : bool
+        True iff success came via the patch/reroute path rather than a
+        first-pass match; drives the RECOVERED_VIA_REROUTE vs CLEAN_PASS
+        outcome distinction in callers.
+    mismatched_ranges : list[tuple[int, int]]
+        Contiguous [start, end) byte ranges that differed; empty on clean pass.
+    mismatch_source : str | None
+        "quantum" | "classical" | "both"; which segment the mismatches fell in.
+    echo_diagnosis : str | None
+        "QUANTUM_CHANNEL_ISSUE" | "POSSIBLE_EAVESDROPPER"; QBER-based verdict.
+    retransmit_bytes : int
+        Bytes sent on the retry path (0 on clean pass).
+    """
 
     success:           bool
     recovered:         bool                      # True iff success came via reroute
@@ -120,7 +141,7 @@ class EchoResult:
 
 
 # ---------------------------------------------------------------------------
-# Public orchestration — call these from application code
+# Public orchestration (call these from application code)
 # ---------------------------------------------------------------------------
 
 
@@ -128,14 +149,43 @@ def alice_transfer(
     node_a,
     payload: bytes,
     decision,           # SplitDecision from Phase 4
-    classical_dc,       # DataChannel — used for Phase 5 data AND Phase 6 echo
-    quantum_dc,         # DataChannel — Phase 5 quantum data only
+    classical_dc,       # DataChannel: used for Phase 5 data AND Phase 6 echo
+    quantum_dc,         # DataChannel: Phase 5 quantum data only
     aes_key: bytes,
     available_ebits: int,
     qber: float,
 ) -> EchoResult:
     """
     Alice: transmit payload (Phase 5) then run echo-validation (Phase 6).
+
+    ----------
+    Parameters
+    ----------
+    node_a : Node
+        Alice's node (provides transmit_payload()).
+    payload : bytes
+        The full plaintext to deliver.
+    decision : SplitDecision
+        Phase 4 split decision (quantum/classical fractions + reason).
+    classical_dc : DataChannel
+        Connected classical channel; carries the AES segment in Phase 5 and
+        the entire echo protocol in Phase 6.
+    quantum_dc : DataChannel
+        Connected quantum-channel stream; Phase 5 SDC data only.
+    aes_key : bytes
+        Session key from reconciliation.
+    available_ebits : int
+        Entanglement budget, forwarded to the quantum transmitter.
+    qber : float
+        Measured QBER of this session's QKD; drives mismatch diagnosis.
+
+    -------
+    Returns
+    -------
+    EchoResult
+    Raises
+    ------
+    ChannelFailureError when the mismatch persists after one reroute attempt.
 
     From the caller's perspective this is one call that either succeeds
     (possibly after an internal reroute) or raises ChannelFailureError.
@@ -159,8 +209,23 @@ def bob_transfer(
     """
     Bob: receive payload (Phase 5) then run echo-validation (Phase 6).
 
-    Returns the final payload (original or patched after rerouting).
-    Also updates node_b.last_received_payload to the final value.
+    ----------
+    Parameters
+    ----------
+    node_b : Node
+        Bob's node (provides receive_payload(); its last_received_payload is
+        updated to the final value).
+    classical_dc, quantum_dc : DataChannel
+        Listening channels mirroring Alice's.
+    aes_key : bytes
+        Session key from reconciliation.
+
+    -------
+    Returns
+    -------
+    bytes
+        The final payload (original on OK, patched after rerouting); also
+        what bob_payload in SessionResult ends up carrying.
     """
     node_b.receive_payload(classical_dc, quantum_dc, aes_key)
     final = _bob_echo_phase(node_b.last_received_payload, classical_dc, aes_key)
@@ -169,7 +234,7 @@ def bob_transfer(
 
 
 # ---------------------------------------------------------------------------
-# Internal — Alice-side echo protocol
+# Internal: Alice-side echo protocol
 # ---------------------------------------------------------------------------
 
 
@@ -182,10 +247,10 @@ def _alice_echo_phase(
 ) -> EchoResult:
     """Receive Bob's echo, compare, and reroute if needed (Alice side)."""
 
-    # Step 1 — receive Bob's encrypted echo of his reassembled payload
+    # Step 1: receive Bob's encrypted echo of his reassembled payload
     echo = decrypt(dc.recv(), aes_key)
 
-    # Step 2 — byte-for-byte comparison
+    # Step 2: byte-for-byte comparison
     ranges = _find_mismatch_ranges(original, echo)
 
     if not ranges:
@@ -198,7 +263,7 @@ def _alice_echo_phase(
         })
         return EchoResult(success=True, recovered=False)
 
-    # Step 3 — classify mismatch source and diagnose
+    # Step 3: classify mismatch source and diagnose
     source = _classify_source(ranges, quantum_len, len(original))
     diagnosis = (
         "QUANTUM_CHANNEL_ISSUE" if qber > ANOMALY_THRESHOLD
@@ -206,7 +271,7 @@ def _alice_echo_phase(
     )
     _log_mismatch(ranges, source, diagnosis, qber, len(original))
 
-    # Step 4 — send patch: only the mismatched byte range(s), classical only
+    # Step 4: send patch: only the mismatched byte range(s), classical only
     patch_msg = {
         "status": "PATCH",
         "patches": [[s, e, original[s:e].hex()] for s, e in ranges],
@@ -214,7 +279,7 @@ def _alice_echo_phase(
     dc.send(encrypt(json.dumps(patch_msg).encode(), aes_key))
     retransmit_bytes = sum(e - s for s, e in ranges)
 
-    # Step 5 — receive Bob's re-echo of the patched range(s)
+    # Step 5: receive Bob's re-echo of the patched range(s)
     re_echo = decrypt(dc.recv(), aes_key)
     expected_re_echo = b"".join(original[s:e] for s, e in ranges)
 
@@ -235,22 +300,22 @@ def _alice_echo_phase(
             retransmit_bytes=retransmit_bytes,
         )
 
-    # Step 6 — one retry exhausted; abort
+    # Step 6: one retry exhausted; abort
     raise ChannelFailureError(ranges=ranges, diagnosis=diagnosis)
 
 
 # ---------------------------------------------------------------------------
-# Internal — Bob-side echo protocol
+# Internal: Bob-side echo protocol
 # ---------------------------------------------------------------------------
 
 
 def _bob_echo_phase(received: bytes, dc, aes_key: bytes) -> bytes:
     """Send echo, handle OK or PATCH from Alice, return final payload (Bob side)."""
 
-    # Step 1 — send encrypted echo of full reassembled payload
+    # Step 1: send encrypted echo of full reassembled payload
     dc.send(encrypt(received, aes_key))
 
-    # Step 2 — receive Alice's status frame
+    # Step 2: receive Alice's status frame
     response = json.loads(decrypt(dc.recv(), aes_key).decode())
 
     if response["status"] == "OK":
@@ -262,7 +327,7 @@ def _bob_echo_phase(received: bytes, dc, aes_key: bytes) -> bytes:
         patched[start:end] = bytes.fromhex(hexdata)
     patched = bytes(patched)
 
-    # Step 3 — re-echo only the patched range(s) so Alice can verify
+    # Step 3: re-echo only the patched range(s) so Alice can verify
     re_echo = b"".join(patched[s:e] for s, e, _ in response["patches"])
     dc.send(encrypt(re_echo, aes_key))
 
@@ -319,6 +384,13 @@ def _log_mismatch(
     qber: float,
     total_len: int,
 ) -> None:
+    """
+    Emit one structured mismatch record.
+
+    QUANTUM_CHANNEL_ISSUE goes to the normal logger at WARNING; the
+    POSSIBLE_EAVESDROPPER verdict goes to the dedicated CRITICAL security
+    logger so it cannot be mistaken for routine noise in the log stream.
+    """
     extra = {
         "diagnosis": diagnosis,
         "mismatch_source": source,
@@ -332,6 +404,6 @@ def _log_mismatch(
     else:
         # CRITICAL level + dedicated logger name = stands out unmistakably
         _security_logger.critical(
-            "SECURITY EVENT: echo mismatch with low QBER — possible eavesdropper",
+            "SECURITY EVENT: echo mismatch with low QBER (possible eavesdropper)",
             extra=extra,
         )

@@ -1,5 +1,5 @@
 """
-Payload splitter — Phase 5
+Payload splitter (Phase 5)
 
 Splitting scheme
 ----------------
@@ -46,6 +46,28 @@ class ReassemblyError(Exception):
 
 @dataclass
 class SplitPayload:
+    """
+    Result of split_payload(): both segments plus the bookkeeping Bob needs.
+
+    ----------
+    Attributes
+    ----------
+    quantum_segment : bytes
+        HEAD of the payload, routed via superdense coding.
+    classical_segment : bytes
+        TAIL of the payload, routed AES-256-GCM encrypted over TCP.
+    quantum_len : int
+        len(quantum_segment); duplicated as an int so receivers never
+        recompute the boundary from floats.
+    classical_len : int
+        len(classical_segment).
+    total_len : int
+        quantum_len + classical_len == original payload length.
+    quantum_fraction_used : float
+        The decision's fraction actually applied (post-floor); recorded for
+        metrics/logging rather than reassembly.
+    """
+
     quantum_segment:   bytes
     classical_segment: bytes
     quantum_len:       int    # == len(quantum_segment)
@@ -95,7 +117,7 @@ def reassemble_from_segments(
     Reconstruct original payload from the two received segments.
 
     Validates lengths against declared metadata and raises ReassemblyError
-    if they don't match — this catches truncation or mix-ups before Phase 6's
+    if they don't match; this catches truncation or mix-ups before Phase 6's
     echo comparison sees corrupted data.
     """
     expected_q = metadata["quantum_len"]
