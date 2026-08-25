@@ -266,7 +266,8 @@ def run_bb84(
          - Alice prepares qubit via _prepare_qubit(alice_bits[i], alice_bases[i])
          - If injected_noise > 0: apply random X and/or Z with prob injected_noise
          - Bob measures via _measure_qubit(qc, bob_bases[i])
-         - Single-shot simulation → bob_results[i]
+       All n_qubit wires go into ONE circuit, executed with a single
+       shots=1 simulation -> bob_results.
     3. Sifting: keep indices where alice_bases[i] == bob_bases[i].
     4. Partition sifted indices: first check_fraction → check sample, rest → key.
     5. QBER = errors / check_sample_size on check positions.
@@ -288,9 +289,16 @@ def run_bb84(
     alice_bases = [rng.randint(0, 1) for _ in range(n_qubits)]
     bob_bases = [rng.randint(0, 1) for _ in range(n_qubits)]
 
-    bob_results: list[int] = []
+    # Batched execution: all n_qubits are independent, so they share one
+    # n-qubit circuit and ONE simulator invocation instead of one per qubit
+    # (~200x fewer AerSimulator.run calls). Per-wire prep/noise/measurement
+    # logic is unchanged and reuses the same helpers as eavesdropper.py.
+    qc = QuantumCircuit(n_qubits, n_qubits)
     for i in range(n_qubits):
-        qc = _prepare_qubit(alice_bits[i], alice_bases[i])
+        qc.compose(
+            _prepare_qubit(alice_bits[i], alice_bases[i]),
+            qubits=[i], clbits=[i], inplace=True,
+        )
         # Basis-symmetric noise injection:
         #   X gate (bit-flip)   causes errors in Z-basis measurements; no effect
         #   in X-basis (X|+> = |+>, X|-> = -|->: global phase only).
@@ -302,13 +310,21 @@ def run_bb84(
         # so measured QBER tracks injected_noise 1:1 regardless of basis.
         if injected_noise > 0.0:
             if np_rng.random() < injected_noise:
-                qc.x(0)  # bit-flip:   error in Z-basis, transparent in X-basis
+                qc.x(i)  # bit-flip:   error in Z-basis, transparent in X-basis
             if np_rng.random() < injected_noise:
-                qc.z(0)  # phase-flip: error in X-basis, transparent in Z-basis
-        _measure_qubit(qc, bob_bases[i])
-        job = simulator.run(qc, shots=1)
-        counts = job.result().get_counts()
-        bob_results.append(int(list(counts.keys())[0]))
+                qc.z(i)  # phase-flip: error in X-basis, transparent in Z-basis
+        qc.compose(
+            _measure_qubit(QuantumCircuit(1, 1), bob_bases[i]),
+            qubits=[i], clbits=[i], inplace=True,
+        )
+
+    bob_results: list[int] = []
+    if n_qubits > 0:
+        counts = simulator.run(qc, shots=1).result().get_counts()
+        # Single shot -> single bitstring, leftmost char = clbit n_qubits-1
+        # (Qiskit little-endian display); reverse to index by qubit number.
+        raw = next(iter(counts))
+        bob_results = [int(b) for b in reversed(raw)]
 
     # Sifting: keep positions where bases agree
     matching = [i for i in range(n_qubits) if alice_bases[i] == bob_bases[i]]

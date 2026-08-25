@@ -303,7 +303,11 @@ def run_one_transfer(
     """
     server = EbitServer(config)
     server.start()
-    server.ready.wait(timeout=5)
+    # Fail fast instead of burning the full per-config timeout on a server
+    # that never came up (e.g. port collision).
+    if not server.ready.wait(timeout=5):
+        server.stop()
+        raise RuntimeError("EbitServer not ready within 5s")
 
     node_a = Node("A", config)
     node_b = Node("B", config)
@@ -353,31 +357,23 @@ def run_one_transfer(
             verify_key_bob(c_dc, aes_key)
 
             bob_transfer(node_b, c_dc, q_dc, aes_key)
-            c_dc.close(); q_dc.close()
         except SessionAbortedError:
-            b_registered.set(); b_channels_ready.set()
-        except ReconciliationIncompleteError as exc:
-            errors["B"] = exc
-            b_registered.set(); b_channels_ready.set()
-            if c_dc is not None:
-                try: c_dc.close()
-                except Exception: pass
-            if q_dc is not None:
-                try: q_dc.close()
-                except Exception: pass
+            # QKD aborted before any channel existed; events still must be
+            # set so Alice's side unblocks (handled in finally below).
+            pass
         except Exception as exc:
             errors["B"] = exc
-            b_registered.set(); b_channels_ready.set()
-            # Explicitly close data channels so Alice's dc.recv() unblocks
-            # immediately instead of hanging until the per-config timeout.
-            # This is the critical fix for the key-mismatch (InvalidTag) hang.
-            if c_dc is not None:
-                try: c_dc.close()
-                except Exception: pass
-            if q_dc is not None:
-                try: q_dc.close()
-                except Exception: pass
         finally:
+            b_registered.set()
+            b_channels_ready.set()
+            # Explicitly close data channels on every path so Alice's
+            # blocking dc.recv() unblocks immediately instead of hanging
+            # until the per-config timeout. This is the critical fix for
+            # the key-mismatch (InvalidTag) hang.
+            for dc in (c_dc, q_dc):
+                if dc is not None:
+                    try: dc.close()
+                    except Exception: pass
             node_b.close()
 
     def run_a():
