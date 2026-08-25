@@ -8,7 +8,8 @@ fraction of the payload to route over the quantum channel (superdense coding) ve
 the classical channel (AES-256-GCM over TCP).  It produces a *decision* only; it
 does not transmit anything (that is Phase 5).
 
-Decision tree
+-------------
+Decision Tree
 -------------
 1. Sufficient ebits?       available_ebits < MIN_VIABLE_EBITS → 100 % classical
 2. QBER acceptable?        qber > QBER_THRESHOLD               → 100 % classical
@@ -19,6 +20,7 @@ Decision tree
                sufficient → MAX_QUANTUM_FRACTION
                constrained → min(ebit_capacity / payload_bits, MAX_QUANTUM_FRACTION)
 
+------------------
 Constant rationale
 ------------------
 MIN_VIABLE_EBITS = 4
@@ -47,8 +49,9 @@ MAX_QUANTUM_FRACTION = 0.75
           "hybrid" premise of the project.
     0.75 is quantum-dominant while preserving the classical fallback.
 
+-----------------------------------------------------
 Ebit-capacity formula ("sufficient for full payload")
-------------------------------------------------------
+-----------------------------------------------------
     payload_bits      = payload_size_bytes * 8
     ebits_needed      = payload_bits / BITS_PER_EBIT   (= payload_size_bytes * 4)
     ebit_capacity_bits = available_ebits * BITS_PER_EBIT
@@ -63,6 +66,7 @@ All constants are module-level named values and can be overridden via the
 
 from __future__ import annotations
 
+import math
 import sys
 import pathlib
 from dataclasses import dataclass
@@ -158,6 +162,7 @@ def compute_split(
     """
     Compute the quantum/classical payload split ratio.
 
+    ----------
     Parameters
     ----------
     security_level    : "low" | "medium" | "high"
@@ -170,19 +175,33 @@ def compute_split(
                         "quantum_fraction_low", "quantum_fraction_medium",
                         "max_quantum_fraction", "bits_per_ebit"
 
+    -------
     Returns
     -------
     SplitDecision with quantum_fraction, classical_fraction, and a reason token.
 
+    ------
     Raises
     ------
-    ValueError if security_level is not one of "low", "medium", "high".
+    ValueError if security_level is not one of "low", "medium", "high", or if
+    numeric inputs are out of range: qber must be finite in [0, 1] (a NaN
+    comparison is always False, so an unvalidated NaN would silently pass the
+    security check), payload_size_bytes >= 1, available_ebits >= 0.
     """
     if security_level not in VALID_SECURITY_LEVELS:
         raise ValueError(
             f"Unknown security_level {security_level!r}. "
             f"Must be one of {sorted(VALID_SECURITY_LEVELS)}."
         )
+    # Numeric validation at the trust boundary: callers feed user-supplied
+    # demo/benchmark values straight into this function.
+    if not (isinstance(qber, (int, float)) and math.isfinite(qber)
+            and 0.0 <= qber <= 1.0):
+        raise ValueError(f"qber must be a finite value in [0, 1], got {qber!r}")
+    if payload_size_bytes < 1:
+        raise ValueError(f"payload_size_bytes must be >= 1, got {payload_size_bytes}")
+    if available_ebits < 0:
+        raise ValueError(f"available_ebits must be >= 0, got {available_ebits}")
 
     t = _resolve_thresholds(thresholds)
 
@@ -237,10 +256,11 @@ def _resolve_thresholds(overrides: dict | None) -> dict:
     Parameters
     ----------
     overrides : dict | None
-        Keys match the lowercase names below (e.g. "min_viable_ebits");
-        unknown keys are accepted and ignored by the algorithm, so a typo
-        here fails silently. Exists so Phase 8 benchmark sweeps can probe
-        alternate policies without editing this module.
+        Keys match the lowercase names below (e.g. "min_viable_ebits").
+        Unknown keys raise ValueError immediately: a typo'd key would
+        otherwise fail silently and the sweep would benchmark the default
+        policy while believing it overrode it. Exists so Phase 8 benchmark
+        sweeps can probe alternate policies without editing this module.
 
     -------
     Returns
@@ -258,6 +278,12 @@ def _resolve_thresholds(overrides: dict | None) -> dict:
         "bits_per_ebit":           BITS_PER_EBIT,
     }
     if overrides:
+        unknown = set(overrides) - set(defaults)
+        if unknown:
+            raise ValueError(
+                f"Unknown threshold key(s) {sorted(unknown)}; "
+                f"valid keys are {sorted(defaults)}."
+            )
         defaults.update(overrides)
     return defaults
 
