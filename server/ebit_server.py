@@ -1,14 +1,46 @@
-"""
-Ebit Server — Phase 2
+r"""
+Ebit Server (Phase 2)
+=====================
 
-Responsibilities:
-  - Node registry (name → socket)
-  - Connection request validation between nodes
+Central control plane every Node connects to at startup. Nodes never open
+direct sockets to each other for session setup; this server brokers identity,
+connections and key material so the data/quantum channels stay purely
+point-to-point.
+
+Responsibilities
+----------------
+  - Node registry (name -> socket) with REGISTER / LIST_NODES
+  - Connection request validation between nodes (CONNECT_REQUEST /
+    NOTIFY_CONNECT / ACCEPT handshake)
   - QKD simulation (BB84 or E91) and ebit-result distribution to both nodes
   - Retry logic: up to MAX_RETRIES attempts before sending SESSION_ABORTED
 
-One handler thread per connected node. Per-socket write locks allow any thread
-to safely push messages to any node.
+--------------
+Wire Protocol
+--------------
+JSON objects, one per newline-terminated line, both directions.
+
+  Client -> Server:
+    REGISTER        {node_id}                       claim an identity
+    LIST_NODES      {}                              who else is registered
+    CONNECT_REQUEST {to}                            ask peer to connect
+    ACCEPT          {from_node}                     answer NOTIFY_CONNECT
+    REQUEST_EBITS   {protocol?, injected_noise?,    run QKD for my session
+                     n_qubits?}
+
+  Server -> Client:
+    REGISTERED | NODES | CONNECT_ACCEPTED | CONNECT_ESTABLISHED |
+    CONNECT_REJECTED {reason} | EBIT_RESULT {role, key, qber, chsh, attempt} |
+    SESSION_ABORTED {reason, qber, chsh} | ERROR {reason}
+
+-----------
+Threading
+-----------
+One daemon handler thread per connected node plus one accept-loop thread;
+REQUEST_EBITS runs QKD synchronously on the requester's handler thread (the
+peer simply waits on its socket). Per-socket write locks allow any handler to
+safely push messages to any registered node; all shared dicts are guarded by
+_registry_lock.
 """
 
 import json
@@ -26,10 +58,35 @@ from metrics.logger import get_logger
 
 logger = get_logger("ebit_server")
 
+# QKD attempts before declaring SESSION_ABORTED.
+# One noisy sample can exceed the 0.11 threshold by chance (~3.6% sigma at
+# ~75 check bits), so a single retry masks statistical flukes while keeping
+# worst-case latency bounded (each attempt costs one full QKD simulation).
 MAX_RETRIES = 2
 
 
 class EbitServer:
+    r"""
+    TCP control-plane server brokering registration, connections and QKD.
+
+    ----------
+    State
+    ----------
+    _registry : dict
+        node_id -> {"conn": socket, "lock": Lock}; live connections only,
+        removed on disconnect.
+    _sessions : dict
+        node_id -> peer_id, stored in BOTH directions once a connection is
+        accepted; drives REQUEST_EBITS addressing.
+    _pending : dict
+        (requester_id, peer_id) -> {"event": Event, "result": str | None};
+        rendezvous for the CONNECT_REQUEST / ACCEPT handshake, popped when
+        the requester's 30s wait resolves.
+    ready : threading.Event
+        Set once start() has bound+listed and the accept loop is running;
+        callers use it as the startup gate.
+    """
+
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self._host: str = config["host"]
@@ -52,6 +109,12 @@ class EbitServer:
     # ------------------------------------------------------------------
 
     def start(self) -> None:
+        """
+        Bind, listen and spawn the accept-loop thread; sets self.ready.
+
+        SO_REUSEADDR so consecutive benchmark/demo runs on fresh ephemeral
+        ports never trip TIME_WAIT.
+        """
         self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_sock.bind((self._host, self._port))
@@ -63,6 +126,7 @@ class EbitServer:
         logger.info("Ebit server started", extra={"host": self._host, "port": self._port})
 
     def stop(self) -> None:
+        """Signal the accept loop to exit and close the listening socket."""
         self._running = False
         if self._server_sock:
             try:
@@ -75,6 +139,7 @@ class EbitServer:
     # ------------------------------------------------------------------
 
     def _accept_loop(self) -> None:
+        """Accept connections until stop(); one handler thread per client."""
         while self._running:
             try:
                 conn, addr = self._server_sock.accept()
@@ -89,11 +154,17 @@ class EbitServer:
     def _send_raw(
         self, conn: socket.socket, lock: threading.Lock, msg: dict
     ) -> None:
+        """
+        Serialize one JSON message (newline-delimited) under the socket's
+        write lock, so concurrent handlers can push to the same peer without
+        interleaving partial lines.
+        """
         data = (json.dumps(msg) + "\n").encode()
         with lock:
             conn.sendall(data)
 
     def _send_to(self, node_id: str, msg: dict) -> None:
+        """Look up a registered node and _send_raw() to it; no-op if gone."""
         with self._registry_lock:
             entry = self._registry.get(node_id)
         if entry:
@@ -104,6 +175,21 @@ class EbitServer:
     # ------------------------------------------------------------------
 
     def _handle_client(self, conn: socket.socket) -> None:
+        r"""
+        Per-node message loop: parse newline-delimited JSON and dispatch on
+        "type" (see Wire Protocol in the module docstring).
+
+        -----
+        Notes
+        -----
+        - REGISTER claims the identity for this socket; every other message
+          from this connection is interpreted as that node.
+        - CONNECT_REQUEST blocks this handler up to 30s waiting for the
+          peer's ACCEPT via a per-handshake Event; both sides are recorded
+          in _sessions only on explicit acceptance.
+        - The finally block unregisters the node and drops BOTH directions
+          of its session so a reconnecting node starts clean.
+        """
         reader = conn.makefile("r")
         node_id: str | None = None
         write_lock = threading.Lock()
@@ -178,6 +264,8 @@ class EbitServer:
                         })
 
                 elif mtype == "ACCEPT":
+                    # Acceptor's reply to NOTIFY_CONNECT: resolve the
+                    # requester's blocked wait with our decision.
                     from_node: str = msg["from_node"]
                     key = (from_node, node_id)
                     with self._registry_lock:
@@ -234,6 +322,33 @@ class EbitServer:
         alice_conn: socket.socket,
         alice_lock: threading.Lock,
     ) -> None:
+        """
+        Run QKD with retries and push matching results to both nodes.
+
+        ----------
+        Parameters
+        ----------
+        alice_id, bob_id : str
+            Session participants (requester first).
+        protocol : str
+            "BB84" | "E91"; selects the security check (QBER vs CHSH+QBER).
+        noise : float
+            injected_noise forwarded to the QKD simulation.
+        n_qubits : int
+            Key-exchange size for BB84 (ignored by E91's CHSH stage).
+        alice_conn, alice_lock : requester's socket + write lock, so the
+            EBIT_RESULT can go straight back on the requesting connection
+            while Bob's copy is routed through his handler thread.
+
+        -----
+        Notes
+        -----
+        Secure result -> EBIT_RESULT to both sides. Insecure -> retry until
+        MAX_RETRIES, then SESSION_ABORTED to both sides with the
+        protocol-specific reason ("QBER_EXCEEDED" / "CHSH_FAILED"). Both
+        nodes receive identical qber/chsh/attempt fields so either side can
+        log or display session quality.
+        """
         for attempt in range(1, MAX_RETRIES + 1):
             alice_key, bob_key, qber, chsh, secure = self._simulate_qkd(
                 protocol, noise, n_qubits
@@ -273,13 +388,29 @@ class EbitServer:
     def _simulate_qkd(
         self, protocol: str, noise: float, n_qubits: int
     ) -> tuple[list[int], list[int], float, float | None, bool]:
-        """
-        Returns (alice_key, bob_key, qber, chsh, secure).
+        r"""
+        Run one QKD simulation and derive both sides' final keys.
 
-        Reuses quantum/ primitives directly — no duplication.
+        -------
+        Returns
+        -------
+        (alice_key, bob_key, qber, chsh, secure) :
+            alice_key / bob_key : post-sifting key bits (may be empty on
+                                  immediate failure)
+            qber                : measured error rate on the check sample
+            chsh                : E91 CHSH value; None for BB84
+            secure              : whether the session may proceed
+
+        -----
+        Notes
+        -----
+        Reuses quantum/ primitives directly; no protocol duplication.
         For BB84: run_bb84() gives both sides' bits.
         For E91:  run_e91() gives CHSH; key material comes from a BB84-style
                   Z-basis measurement run on the same channel (standard E91 practice).
+        The key split below MUST use the same BB84_CHECK_FRACTION as
+        run_bb84() so check and key positions stay consistent
+        (check = matching[:split], key = matching[split:]).
         """
         chsh: float | None = None
 
@@ -309,7 +440,7 @@ class EbitServer:
 
         if protocol == "BB84":
             secure = qber <= BB84_QBER_THRESHOLD
-        else:  # E91 — CHSH already passed; also check qber
+        else:  # E91: CHSH already passed above; QBER must pass too
             secure = qber <= BB84_QBER_THRESHOLD
 
         return alice_key, bob_key, qber, chsh, secure
