@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""
-Dashboard / figure generator for the HBD Class Quant benchmark results.
+r"""
+Dashboard / Figure Generator for Benchmark Results
+==================================================
 
-Reads all metrics/logs/benchmark_*.jsonl files and produces:
-  - metrics/figures/fig1_qber_vs_noise.png
-  - metrics/figures/fig2_outcome_breakdown.png
-  - metrics/figures/fig3_split_ratio.png
-  - metrics/figures/fig5_skr_vs_qber.png
-  - metrics/figures/fig6_throughput_latency.png
-  - metrics/dashboard.html  (self-contained interactive page — no server needed)
+Reads every metrics/logs/benchmark_*.jsonl record produced by
+scripts/run_benchmark.py and renders the empirical dataset into:
+
+  - metrics/figures/fig*.png             (static matplotlib, for the report)
+  - metrics/dashboard.html               (self-contained interactive page, no server needed)
+  - demo-frontend/public/dashboard.html  (mirror served by the React frontend)
+
+Why
+---
+Benchmark logs are only useful if they can be inspected. This script is the
+single rendering step between raw JSONL records and every human-facing
+artifact: report figures plus the interactive dashboard page embedded in the
+frontend. Re-run it after every benchmark sweep to refresh all outputs.
 
 Charts skipped (data not available):
-  - Fig 4: Reconciliation bits_corrected / bits_sacrificed — these fields are NOT
+  - Fig 4: Reconciliation bits_corrected / bits_sacrificed; these fields are NOT
     written to the log (reconciliation happens before MetricsCollector is called).
-  - Fig 7: CHSH parameter for E91 — all sessions are BB84; chsh field is always null.
+  - Fig 7: CHSH parameter for E91; all sessions are BB84; chsh field is always null.
 
 Outcome-breakdown note:
   SESSION_ABORTED and RECONCILIATION_INCOMPLETE outcomes do not produce log records
@@ -45,11 +52,18 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths (single source of truth for every input/output location)
 # ---------------------------------------------------------------------------
 
+# Repo root, derived from this file's location so the script works when run
+# from any working directory.
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# Input: append-only JSONL logs written by scripts/run_benchmark.py.
 _LOG_DIR = _ROOT / "metrics" / "logs"
+
+# Outputs: static PNGs for the report, the self-contained Plotly page, and
+# the mirror that Vite serves to the React frontend at /dashboard.html.
 _FIG_DIR = _ROOT / "metrics" / "figures"
 _HTML_OUT = _ROOT / "metrics" / "dashboard.html"
 _FRONTEND_OUT = _ROOT / "demo-frontend" / "public" / "dashboard.html"
@@ -57,9 +71,13 @@ _FRONTEND_OUT = _ROOT / "demo-frontend" / "public" / "dashboard.html"
 _FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Colour palette (consistent across static + interactive)
+# Colour palette
 # ---------------------------------------------------------------------------
 
+# Shared across static PNGs and the interactive HTML so a colour means the
+# same thing everywhere: green = clean success, amber = recovered via
+# reroute, red = hard failure, grey/purple = inferred or incomplete,
+# blue/orange/purple = low/medium/high security levels in Fig 3.
 PALETTE = {
     "CLEAN_PASS": "#2ecc71",  # green
     "RECOVERED_VIA_REROUTE": "#f39c12",  # amber
@@ -76,6 +94,10 @@ PALETTE = {
 # Data loading
 # ---------------------------------------------------------------------------
 
+# Maps split_reason (recorded by split_controller.compute_split()) onto the
+# coarse levels grouped in Fig 3. Degraded-mode reasons outside the first
+# three are kept verbatim ("constrained", "qber_unsafe") so those records
+# stay distinguishable instead of being silently lumped into a level.
 SPLIT_REASON_TO_LEVEL = {
     "LOW_SECURITY": "low",
     "MEDIUM_SECURITY": "medium",
@@ -84,6 +106,9 @@ SPLIT_REASON_TO_LEVEL = {
     "QBER_UNSAFE": "qber_unsafe",
 }
 
+# Grid arithmetic used by Fig 2: the log only contains rows for configs that
+# completed a transfer, so the aborted row (noise=0.12) is reconstructed from
+# the known grid shape rather than from records.
 GRID_TOTAL = 54  # 3 sec × 3 payload × 3 noise × 2 fault configs per full run
 GRID_NOISE_ROWS = 3  # noise levels: 0.00, 0.05, 0.12
 GRID_PER_NOISE = GRID_TOTAL // GRID_NOISE_ROWS  # 18 configs at each noise level
@@ -138,6 +163,16 @@ def load_all_records() -> tuple[list[dict], list[dict]]:
 
 
 def date_range(records: list[dict]) -> tuple[str, str]:
+    """
+    Earliest and latest record timestamps across the given records.
+
+    -------
+    Returns
+    -------
+    (str, str)
+        (min timestamp_utc, max timestamp_utc); ("?", "?") when no record
+        carries a usable timestamp.
+    """
     ts_vals = [r["timestamp_utc"] for r in records if r.get("timestamp_utc")]
     if not ts_vals:
         return "?", "?"
@@ -145,7 +180,7 @@ def date_range(records: list[dict]) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Fig 1 — QBER vs injected noise level
+# Fig 1: QBER vs injected noise level
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +225,7 @@ def fig1_qber_vs_noise(records: list[dict]) -> dict:
     ax.set_xticklabels([f"Injected noise\n{g}" for g in groups])
     ax.set_ylabel("Measured QBER")
     ax.set_title(
-        "Fig 1 — Measured QBER vs Injected Noise Level\n(BB84, n_qubits=200, all logged sessions)"
+        "Fig 1: Measured QBER vs Injected Noise Level\n(BB84, n_qubits=200, all logged sessions)"
     )
     ax.legend(loc="upper left")
     ax.set_ylim(-0.01, 0.15)
@@ -214,7 +249,7 @@ def fig1_qber_vs_noise(records: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Fig 2 — Outcome breakdown by noise level (latest run, reconstructed)
+# Fig 2: Outcome breakdown by noise level (latest run, reconstructed)
 # ---------------------------------------------------------------------------
 
 
@@ -253,7 +288,7 @@ def fig2_outcome_breakdown(latest: list[dict]) -> dict:
         aborted_incomplete,
         width,
         bottom=clean,
-        label="SESSION_ABORTED / RECON_INCOMPLETE\n(inferred — not logged)",
+        label="SESSION_ABORTED / RECON_INCOMPLETE\n(inferred, not logged)",
         color=PALETTE["SESSION_ABORTED"],
         hatch="//",
     )
@@ -287,7 +322,7 @@ def fig2_outcome_breakdown(latest: list[dict]) -> dict:
     ax.set_xticklabels([f"Injected noise\n{l}" for l in labels])
     ax.set_ylabel("Number of configurations")
     ax.set_title(
-        "Fig 2 — Transfer Outcome Breakdown by Injected Noise Level\n"
+        "Fig 2: Transfer Outcome Breakdown by Injected Noise Level\n"
         f"(Latest run: {len(latest)} logged / 54 total configs; "
         f"* = inferred from grid arithmetic)"
     )
@@ -312,7 +347,7 @@ def fig2_outcome_breakdown(latest: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Fig 3 — Split ratio by security level
+# Fig 3: Split ratio by security level
 # ---------------------------------------------------------------------------
 
 
@@ -514,7 +549,7 @@ def fig3_split_ratio(records: list[dict]) -> dict:
     # -----------------------------------------------------------------------
 
     fig.suptitle(
-        "Fig 3 — Split Ratio (Quantum Fraction) by Security Level\n"
+        "Fig 3: Split Ratio (Quantum Fraction) by Security Level\n"
         "(all runs, all payload sizes)",
         fontsize=13,
         fontweight="bold",
@@ -556,14 +591,14 @@ def fig3_split_ratio(records: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Fig 5 — Secret Key Rate vs QBER
+# Fig 5: Secret Key Rate vs QBER
 # ---------------------------------------------------------------------------
 
 
 def fig5_skr_vs_qber(records: list[dict]) -> dict:
     """
     Scatter plot of skr_bits_per_second vs qber.
-    Uses latest-run records only — earlier runs used different protocol versions
+    Uses latest-run records only: earlier runs used different protocol versions
     (pre-reconciliation) whose QKD timing is not directly comparable.
     Colour by noise_group; size by qkd_key_bits.
     """
@@ -587,7 +622,7 @@ def fig5_skr_vs_qber(records: list[dict]) -> dict:
     ax.set_xlabel("Measured QBER")
     ax.set_ylabel("Secret Key Rate (bits/s)  [= key_bits / QKD_time]")
     ax.set_title(
-        "Fig 5 — Secret Key Rate vs Measured QBER\n(point size ∝ key length; latest run, Phase 9)"
+        "Fig 5: Secret Key Rate vs Measured QBER\n(point size ∝ key length; latest run, Phase 9)"
     )
     ax.legend()
     ax.grid(alpha=0.3)
@@ -606,7 +641,7 @@ def fig5_skr_vs_qber(records: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Fig 4 — Reconciliation bits corrected / sacrificed
+# Fig 4: Reconciliation bits corrected / sacrificed
 # ---------------------------------------------------------------------------
 
 
@@ -624,13 +659,14 @@ def fig4_reconciliation(records: list[dict]) -> dict | None:
     if not recs:
         print(
             f"  [SKIP] {(_FIG_DIR / 'fig4_reconciliation_bits.png').relative_to(_ROOT)} "
-            f"— no schema-1.1 records (re-run benchmark to populate)"
+            f"(no schema-1.1 records; re-run benchmark to populate)"
         )
         return None
     groups = ("0.00 (noiseless)", "0.05 (moderate)")
     labels = ["0.00 (noiseless)", "0.05 (moderate)"]
 
     def mean_of(field: str, group: str) -> float:
+        """Mean of `field` over records of one noise group; 0.0 when empty."""
         vals = [r[field] for r in recs if r["noise_group"] == group]
         return float(np.mean(vals)) if vals else 0.0
 
@@ -669,7 +705,7 @@ def fig4_reconciliation(records: list[dict]) -> dict | None:
     ax.set_xticklabels(labels)
     ax.set_ylabel("Mean bits per transfer")
     ax.set_title(
-        "Fig 4 — Reconciliation Bits Corrected / Sacrificed\n(latest run, Bob-side Cascade view)"
+        "Fig 4: Reconciliation Bits Corrected / Sacrificed\n(latest run, Bob-side Cascade view)"
     )
     ax.legend()
     ax.grid(alpha=0.3, axis="y")
@@ -689,15 +725,15 @@ def fig4_reconciliation(records: list[dict]) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Fig 6 — Throughput and latency by payload size
+# Fig 6: Throughput and latency by payload size
 # ---------------------------------------------------------------------------
 
 
 def fig6_throughput_latency(records: list[dict]) -> dict:
     """
     Grouped bar: mean throughput and latency per payload size bucket.
-    Uses latest-run records only — earlier runs have pre-reconciliation timing
-    that inflates throughput by 100–500× (sub-millisecond transfer times from
+    Uses latest-run records only: earlier runs have pre-reconciliation timing
+    that inflates throughput by 100-500x (sub-millisecond transfer times from
     an earlier, lighter protocol version).
     Two y-axes (throughput left, latency right).
     """
@@ -752,7 +788,7 @@ def fig6_throughput_latency(records: list[dict]) -> dict:
     ax1.set_xticks(x)
     ax1.set_xticklabels(labels)
     ax1.set_title(
-        "Fig 6 — Throughput and Latency by Payload Size\n(mean ± 1 std, latest run, Phase 9)"
+        "Fig 6: Throughput and Latency by Payload Size\n(mean ± 1 std, latest run, Phase 9)"
     )
 
     lines1, lbls1 = ax1.get_legend_handles_labels()
@@ -792,13 +828,13 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         cols=2,
         specs=[[{}, {}], [{}, {}], [{}, {}], [{"colspan": 2}, None]],
         subplot_titles=[
-            "Fig 1 — Measured QBER vs Injected Noise",
-            "Fig 2 — Outcome Breakdown by Noise Level (latest run, 54 configs)",
-            "Fig 3 — Quantum Fraction by Security Level",
-            "Fig 5 — Secret Key Rate vs Measured QBER",
-            "Fig 6a — Throughput by Payload Size",
-            "Fig 6b — End-to-end Latency by Payload Size",
-            "Fig 4 — Reconciliation Bits Corrected / Sacrificed (latest run)",
+            "Fig 1: Measured QBER vs Injected Noise",
+            "Fig 2: Outcome Breakdown by Noise Level (latest run, 54 configs)",
+            "Fig 3: Quantum Fraction by Security Level",
+            "Fig 5: Secret Key Rate vs Measured QBER",
+            "Fig 6a: Throughput by Payload Size",
+            "Fig 6b: End-to-end Latency by Payload Size",
+            "Fig 4: Reconciliation Bits Corrected / Sacrificed (latest run)",
         ],
         vertical_spacing=0.11,
         horizontal_spacing=0.10,
@@ -897,7 +933,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
             col=1,
         )
 
-    # ---- Fig 5 (latest run only — protocol-consistent timing) ----
+    # ---- Fig 5 (latest run only: protocol-consistent timing) ----
     for group, color in [
         ("0.00 (noiseless)", "#3498db"),
         ("0.05 (moderate)", "#e67e22"),
@@ -929,7 +965,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         )
     fig.add_vline(x=0.11, line_dash="dash", line_color="red", row=2, col=2)
 
-    # ---- Fig 6a — throughput (latest run only) ----
+    # ---- Fig 6a: throughput (latest run only) ----
     sizes = sorted(set(r["payload_bytes"] for r in latest))
     tput_data = {
         sz: [r["throughput_bytes_per_s"] for r in latest if r["payload_bytes"] == sz]
@@ -959,7 +995,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         col=1,
     )
 
-    # ---- Fig 6b — latency ----
+    # ---- Fig 6b: latency ----
     fig.add_trace(
         go.Bar(
             x=size_labels,
@@ -975,7 +1011,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         col=2,
     )
 
-    # ---- Fig 4 — reconciliation stats (schema >= 1.1 records only) ----
+    # ---- Fig 4: reconciliation stats (schema >= 1.1 records only) ----
     recon_recs = [r for r in latest if r.get("bits_corrected") is not None]
     if recon_recs:
         groups = ["0.00 (noiseless)", "0.05 (moderate)"]
@@ -1040,7 +1076,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         title=dict(
             text=(
                 "<b>Dynamic Hybrid Quantum-Classical Communication System</b><br>"
-                "<sub>Benchmark Results Dashboard — BB84 + SDC, n_qubits=200, Phase 9 (reconciliation enabled)</sub>"
+                "<sub>Benchmark Results Dashboard: BB84 + SDC, n_qubits=200, Phase 9 (reconciliation enabled)</sub>"
             ),
             x=0.5,
             font=dict(size=16),
@@ -1065,7 +1101,7 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
     if not recon_recs:
         pass  # Fig 4 already annotated in-panel above
     skipped.append(
-        "Fig 7 (CHSH/E91) — all sessions used BB84 (chsh=null for all records)."
+        "Fig 7 (CHSH/E91): all sessions used BB84 (chsh=null for all records)."
     )
     fig.add_annotation(
         x=0.5,
@@ -1106,6 +1142,27 @@ def print_summary(
     fig5_stats: dict,
     fig6_stats: dict,
 ) -> None:
+    r"""
+    Print the human-readable takeaway sheet after generation.
+
+    ----------
+    Parameters
+    ----------
+    all_records, latest : list[dict]
+        As returned by load_all_records().
+    ts_start, ts_end : str
+        Date range from date_range().
+    fig1_stats .. fig6_stats : dict
+        Takeaway dicts returned by the corresponding fig*() renderer;
+        fig4_stats is None when the log predates schema 1.1.
+
+    -----
+    Notes
+    -----
+    Exists so the console itself states the headline conclusions (QBER vs
+    threshold, clean-pass percentage, split-ratio targets, SKR spread)
+    without requiring the reader to open any chart.
+    """
 
     n_total = len(all_records)
     n_latest = len(latest)
@@ -1121,24 +1178,24 @@ def print_summary(
     print()
     print("  Chart takeaways:")
     print(
-        f"  [Fig 1] QBER vs noise — noiseless sessions: QBER=0.0 (n={fig1_stats['noiseless_n']}); "
+        f"  [Fig 1] QBER vs noise; noiseless sessions: QBER=0.0 (n={fig1_stats['noiseless_n']}); "
         f"moderate-noise sessions: mean QBER={fig1_stats['moderate_mean_qber']:.4f} "
         f"(n={fig1_stats['moderate_n']}), all well below the 0.11 abort threshold."
     )
     print(
-        f"  [Fig 2] Outcome breakdown — {fig2_stats['clean_pass']}/54 ({fig2_stats['pct_clean']:.0f}%) "
+        f"  [Fig 2] Outcome breakdown: {fig2_stats['clean_pass']}/54 ({fig2_stats['pct_clean']:.0f}%) "
         f"CLEAN_PASS; {fig2_stats['aborted_or_incomplete']}/54 ({fig2_stats['pct_aborted']:.0f}%) "
         f"aborted or reconciliation-incomplete (all from noise=0.12 configs, not logged)."
     )
     frac = fig3_stats["mean_quantum_fraction"]
     print(
-        f"  [Fig 3] Split ratio — mean quantum fractions: "
+        f"  [Fig 3] Split ratio: mean quantum fractions: "
         f"low={frac['low']:.2f}, medium={frac['medium']:.2f}, high={frac['high']:.2f}, "
         f"matching the 0.25/0.50/0.75 target policy precisely."
     )
     if fig4_stats is not None:
         print(
-            f"  [Fig 4] Reconciliation — Cascade corrections: "
+            f"  [Fig 4] Reconciliation: Cascade corrections: "
             f"noiseless={fig4_stats['corr_noiseless']:.1f} bits, "
             f"moderate={fig4_stats['corr_moderate']:.1f} bits; "
             f"sacrificed (privacy amp.): "
@@ -1148,11 +1205,11 @@ def print_summary(
         )
     else:
         print(
-            f"  [Fig 4] SKIPPED — bits_corrected / bits_sacrificed absent in this log "
+            f"  [Fig 4] SKIPPED: bits_corrected / bits_sacrificed absent in this log "
             f"(pre-1.1 schema run); re-run the benchmark to populate."
         )
     print(
-        f"  [Fig 5] SKR vs QBER — SKR range {fig5_stats['skr_min']:.1f}–{fig5_stats['skr_max']:.1f} bits/s; "
+        f"  [Fig 5] SKR vs QBER: SKR range {fig5_stats['skr_min']:.1f}- {fig5_stats['skr_max']:.1f} bits/s; "
         f"higher QBER correlates with more sifting loss → lower SKR as expected."
     )
     sizes = fig6_stats["payload_sizes"]
@@ -1166,7 +1223,7 @@ def print_summary(
         f"Latency dominated by QKD + SDC encoding overhead, not payload size."
     )
     print(
-        f"  [Fig 7] SKIPPED — no E91 sessions in log (chsh=null for all {n_total} records)."
+        f"  [Fig 7] SKIPPED: no E91 sessions in log (chsh=null for all {n_total} records)."
     )
     print()
     print("  Output files:")
@@ -1202,7 +1259,7 @@ def spot_check(latest: list[dict]) -> None:
     db_moderate = sum(1 for r in latest if r["noise_group"] == "0.05 (moderate)")
 
     print()
-    print("  Manual spot-check — Fig 2 outcome counts vs raw JSONL:")
+    print("  Manual spot-check: Fig 2 outcome counts vs raw JSONL:")
     print(f"    File                   : {raw_path.name}")
     print(f"    Raw total records      : {raw_total}")
     print(
@@ -1225,6 +1282,27 @@ def spot_check(latest: list[dict]) -> None:
 
 
 def main() -> None:
+    r"""
+    Render every figure and both HTML outputs, then self-check and summarise.
+
+    ----------
+    Workflow
+    ----------
+    1. load_all_records(): read all benchmark_*.jsonl files; "latest" is the
+       most recent file (protocol-consistent timing for Figs 5, 6, 2).
+    2. Static PNGs via matplotlib (Figs 1, 2, 3, 5, 6, 4 when present).
+    3. build_html_dashboard(): one interactive Plotly page written to
+       metrics/dashboard.html and mirrored to demo-frontend/public/.
+    4. spot_check(): verify Fig 2's counts against a raw recount of the
+       newest JSONL (guards against grouping bugs).
+    5. print_summary(): console takeaways + output file listing.
+
+    -----
+    Notes
+    -----
+    Figs 5 and 6 deliberately use latest-run records only: earlier runs came
+    from pre-reconciliation protocol versions whose timing is not comparable.
+    """
     print("\nGenerating dashboard figures...")
     print(f"  Log dir  : {_LOG_DIR}")
     print(f"  Fig dir  : {_FIG_DIR}")
@@ -1248,10 +1326,10 @@ def main() -> None:
     fig3_stats = fig3_split_ratio(all_records)
     fig5_stats = fig5_skr_vs_qber(
         latest
-    )  # latest run only — protocol-consistent timing
+    )  # latest run only: protocol-consistent timing
     fig6_stats = fig6_throughput_latency(
         latest
-    )  # latest run only — protocol-consistent timing
+    )  # latest run only: protocol-consistent timing
     fig4_stats = fig4_reconciliation(latest)  # latest run only; None for legacy logs
 
     print("\n  Generating interactive HTML (plotly):")
