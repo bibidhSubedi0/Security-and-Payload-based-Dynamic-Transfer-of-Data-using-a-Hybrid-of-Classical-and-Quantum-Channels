@@ -1,8 +1,8 @@
 """
-Quantum channel transmitter — Phase 5
+Quantum channel transmitter (Phase 5)
 
 Encodes a byte string via superdense coding (Phase 1) and returns the decoded
-bytes — simulating what Bob receives over the quantum channel.
+bytes, simulating what Bob receives over the quantum channel.
 
 Bit layout
 ----------
@@ -61,12 +61,27 @@ def encode_bytes_sdc(data: bytes, available_ebits: int) -> bytes:
     """
     Encode data bytes via superdense coding simulation and return decoded bytes.
 
-    In the noiseless simulation this is a round-trip identity (decoded == data).
-    In a real system, Alice would apply the encoding unitary on her half of each
-    shared Bell pair and send the qubit to Bob; Bob measures jointly.  Here the
-    full circuit (Alice's encoding + Bob's decoding) runs locally in AerSimulator.
+    ----------
+    Parameters
+    ----------
+    data : bytes
+        Quantum segment to transmit (may be empty).
+    available_ebits : int
+        Entanglement budget for this session.
 
-    Raises EbitCapacityError if available_ebits < ebits_needed(len(data)).
+    -------
+    Returns
+    -------
+    bytes
+        Decoded bytes. In the noiseless simulation this is a round-trip
+        identity (decoded == data).  In a real system, Alice would apply the
+        encoding unitary on her half of each shared Bell pair and send the
+        qubit to Bob; Bob measures jointly.  Here the full circuit (Alice's
+        encoding + Bob's decoding) runs locally in AerSimulator.
+
+    Raises
+    ------
+    EbitCapacityError if available_ebits < ebits_needed(len(data)).
     """
     required = ebits_needed(len(data))
     if required > available_ebits:
