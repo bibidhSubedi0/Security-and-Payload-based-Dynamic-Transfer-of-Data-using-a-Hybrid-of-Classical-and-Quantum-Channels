@@ -7,6 +7,7 @@ direct sockets to each other for session setup; this server brokers identity,
 connections and key material so the data/quantum channels stay purely
 point-to-point.
 
+----------------
 Responsibilities
 ----------------
   - Node registry (name -> socket) with REGISTER / LIST_NODES
