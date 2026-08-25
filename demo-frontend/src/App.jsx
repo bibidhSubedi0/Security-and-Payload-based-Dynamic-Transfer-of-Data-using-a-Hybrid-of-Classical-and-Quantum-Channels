@@ -109,6 +109,9 @@ export default function App() {
         <p className="subtitle">
           QKD key exchange &middot; dynamic payload split &middot; live channel telemetry
         </p>
+        <a href="/dashboard.html" target="_blank" rel="noreferrer">
+          Benchmark Dashboard
+        </a>
       </header>
 
       <ControlPanel

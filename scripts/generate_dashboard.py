@@ -52,6 +52,7 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _LOG_DIR = _ROOT / "metrics" / "logs"
 _FIG_DIR = _ROOT / "metrics" / "figures"
 _HTML_OUT = _ROOT / "metrics" / "dashboard.html"
+_FRONTEND_OUT = _ROOT / "demo-frontend" / "public" / "dashboard.html"
 
 _FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1083,6 +1084,9 @@ def build_html_dashboard(all_records: list[dict], latest: list[dict]) -> None:
         full_html=True,
     )
     print(f"  [OK] {_HTML_OUT.relative_to(_ROOT)}")
+    if _FRONTEND_OUT.parent.is_dir():
+        _FRONTEND_OUT.write_bytes(_HTML_OUT.read_bytes())
+        print(f"  [OK] {_FRONTEND_OUT.relative_to(_ROOT)}")
 
 
 # ---------------------------------------------------------------------------
