@@ -14,7 +14,7 @@ the test orchestration derives AES keys directly from the raw QKD session key,
 so any noise above ~0.05 crashes with an AES InvalidTag or hangs Alice's recv()
 forever. The benchmark orchestration adds Phase 9 reconciliation, explicit
 channel closes on every error path (the documented hang fix), and clean
-SESSION_ABORTED / RECON_INCOMPLETE outcome mapping -- all required for live
+SESSION_ABORTED / RECON_INCOMPLETE outcome mapping: all required for live
 noise-sweep demos.
 
 Outcome vocabulary returned in SessionResult.outcome:
@@ -59,6 +59,9 @@ from transmission.payload_splitter import split_payload
 
 from quantum_demo.models import SessionResult, SplitInfo
 
+# Per-thread join budget. Generous enough for a 200-qubit QKD session plus
+# reconciliation on modest hardware, short enough that a hung socket fails
+# the demo with a TIMEOUT outcome instead of freezing the UI.
 _DEFAULT_TIMEOUT_S = 45.0
 
 
@@ -77,6 +80,7 @@ class _CaptureHandler(logging.Handler):
             "%(asctime)s %(name)s %(levelname)s %(message)s"))
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Format one record into the sink; callback errors are swallowed."""
         try:
             line = self.format(record)
         except Exception:
@@ -114,6 +118,7 @@ def _attach_capture(handler: logging.Handler) -> list:
 
 
 def _detach_capture(handler: logging.Handler, touched: list) -> None:
+    """Undo _attach_capture(); never raises (logging must not break the demo)."""
     for lg in touched:
         try:
             lg.removeHandler(handler)
@@ -126,12 +131,40 @@ def _detach_capture(handler: logging.Handler, touched: list) -> None:
 # ---------------------------------------------------------------------------
 
 def _free_port() -> int:
+    """
+    Obtain an unused loopback port from the OS (bind to port 0, read, release).
+
+    -------
+    Returns
+    -------
+    int
+        A port number that was free at call time; the caller binds it
+        immediately, so kernel reassignment races are vanishingly rare.
+    """
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
 def _normalize_config(config: dict) -> dict:
+    """
+    Fill every optional config key with the system default.
+
+    ----------
+    Parameters
+    ----------
+    config : dict
+        User-supplied partial config; never mutated.
+
+    -------
+    Returns
+    -------
+    dict
+        Complete config. Ports get fresh ephemeral values when absent so
+        consecutive demo runs never collide; available_ebits is set to 2x
+        the maximum possible quantum demand so ebit scarcity never distorts
+        the split decision in a demo context.
+    """
     cfg = dict(config)
     payload_size = int(cfg.get("payload_size_bytes", 64))
     cfg.setdefault("host", "127.0.0.1")
@@ -208,6 +241,34 @@ def run_session(
 
 
 def _run(cfg, payload, fault_cfg, metrics_log_path, timeout_s, log_lines):
+    """
+    Internal orchestrator behind run_session(); see run_session() for the
+    parameter contract.
+
+    ----------
+    Workflow
+    ----------
+    1. Start EbitServer; Node A and Node B register and connect.
+    2. Both sides run QKD (BB84 or E91 per cfg["protocol"]).
+    3. Cascade reconciliation + HKDF-SHA256 key derivation on each side,
+       with an explicit key-verification round before any payload moves.
+    4. Alice computes the dynamic split, optionally corrupts the classical
+       segment (fault injector), then runs the echo-validated transfer.
+    5. Outcomes are mapped in strict precedence order (TIMEOUT > ABORTED >
+       RECON_INCOMPLETE > ERROR > echo outcome) because later checks would
+       otherwise mask the protocol-level cause.
+    6. When configured AND a transfer completed, one benchmark-schema JSONL
+       record is appended via MetricsCollector.
+
+    -----
+    Notes
+    -----
+    Alice and Bob run on separate daemon threads because both block on
+    socket I/O against each other; results cross back through
+    single-element list holders (closure cells are read-only). The
+    FaultInjector import is deferred into this function so merely importing
+    this module stays cheap for callers that never run a session.
+    """
     from classical.fault_injector import FaultInjector
     injector = FaultInjector(fault_cfg or {"fault_injection": {"enabled": False}})
 
@@ -234,6 +295,11 @@ def _run(cfg, payload, fault_cfg, metrics_log_path, timeout_s, log_lines):
     recon_incomplete_h: list = [False]
 
     def run_b():
+        """
+        Bob's side: register, QKD, listen on both channels, reconcile,
+        verify key, receive the transfer. On any failure, closes both
+        channels explicitly so Alice's blocking recv() unblocks at once.
+        """
         c_dc = None
         q_dc = None
         try:
@@ -276,6 +342,11 @@ def _run(cfg, payload, fault_cfg, metrics_log_path, timeout_s, log_lines):
             node_b.close()
 
     def run_a():
+        """
+        Alice's side: wait for Bob, QKD (timed), reconcile, verify key,
+        compute split, inject faults, run the echo-validated transfer
+        (timed). Failures land in `errors`; timing/results in the holders.
+        """
         try:
             b_registered.wait(timeout=15)
             if "B" in errors:
@@ -438,6 +509,13 @@ def _run(cfg, payload, fault_cfg, metrics_log_path, timeout_s, log_lines):
 
 
 def _close_quietly(dc) -> None:
+    """
+    Close a DataChannel, swallowing every error.
+
+    Used on failure paths where the channel may be half-open or already
+    dead: the close exists only to unblock the peer's recv(), so its own
+    exceptions carry no signal worth propagating.
+    """
     if dc is None:
         return
     try:
