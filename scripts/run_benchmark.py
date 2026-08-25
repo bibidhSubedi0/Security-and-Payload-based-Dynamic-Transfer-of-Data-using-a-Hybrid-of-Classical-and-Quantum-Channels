@@ -1,32 +1,94 @@
 #!/usr/bin/env python3
-"""
-Phase 8 Part C — Benchmarking sweep script
+r"""
+End-to-End Benchmark Sweep (Phase 8 Part C)
+===========================================
 
-Runs many transfers across a grid of configurations and uses Phase 7's
-MetricsCollector to log each one to a timestamped .jsonl file.
+Runs the fully assembled hybrid quantum-classical transfer pipeline
+(QKD, reconciliation, key derivation, dynamic split, echo-validated
+transfer) across a fixed grid of operating conditions and logs one
+metrics record per configuration to a timestamped .jsonl file.
 
+Why
+---
+Unit tests prove each phase works in isolation; this script proves the
+assembled system works together, and produces the empirical dataset
+(success rate vs noise, QBER, SKR, throughput, latency, split ratios) that
+scripts/generate_dashboard.py renders into figures + dashboard.html.
+
+--------------------------
+Per-Configuration Pipeline
+--------------------------
+Each of the 54 configurations spins up an isolated loopback deployment
+(fresh free ports each iteration, sequential execution):
+
+1. Start EbitServer; Node A and Node B register and establish a connection.
+2. Both sides run BB84 QKD (n_qubits=200) → shared sifted key + measured
+   QBER. Measured QBER > 0.11 (abort threshold) → SessionAbortedError.
+3. Single-pass Cascade reconciliation corrects residual bit errors, then
+   HKDF-SHA256 derives the AES-256-GCM session key; an explicit key
+   verification round runs before any payload moves. If privacy
+   amplification leaves no bits → ReconciliationIncompleteError.
+4. Alice computes the dynamic split (split_controller.compute_split) from
+   security level, payload size, available ebits, and measured QBER.
+5. Optional fault injection corrupts the classical segment plaintext
+   before transmission (models channel degradation).
+6. Echo-validated transfer (transmission.echo_validation): quantum segment
+   via superdense coding over the quantum channel, classical segment
+   AES-GCM encrypted over the data channel; Bob echoes a digest back for
+   end-to-end validation.
+
+----
 Grid
 ----
-  security_level  : ["low", "medium", "high"]          — 3 values
-  payload_size_B  : [16, 128, 512]                      — 3 values (small/medium/large)
-  injected_qber   : [0.0, 0.05, 0.12]                   — 3 values
+  security_level  : ["low", "medium", "high"]           (3 values)
+  payload_size_B  : [16, 128, 512]                      (3 values, small/medium/large)
+  injected_qber   : [0.0, 0.05, 0.12]                   (3 values)
                     0.0  → noiseless channel
                     0.05 → moderate degradation (QBER < 0.11 → transfers proceed)
                     0.12 → above abort threshold (QBER > 0.11 → SESSION_ABORTED)
-  fault_injection : [off, BER=0.05]                     — 2 values
+  fault_injection : [off, BER=0.05]                     (2 values)
 
-Total: 3 × 3 × 3 × 2 = 54 configurations.
+Total: 3 * 3 * 3 * 2 = 54 configurations.
+NOTE: noise=0.12 configs never produce transfer records: they are aborted
+before any payload moves, so only their failure records appear in the log.
+Consumers (generate_dashboard.py) reconstruct this row via grid arithmetic.
+
+-------------
+Outcome Codes
+-------------
+  CLEAN_PASS                 : echo validated on first attempt
+  RECOVERED_VIA_REROUTE      : echo validated after in-transfer recovery
+  CHANNEL_FAILURE            : echo digest mismatch (integrity lost)
+  SESSION_ABORTED            : QBER above 0.11 → no key derived
+  RECONCILIATION_INCOMPLETE  : nothing left after privacy amplification
+  KEY_MISMATCH_ERROR         : InvalidTag raised by AES-GCM; keys diverged
+                               despite reconciliation
+  TIMEOUT                    : threads still alive after 60s (unexpected)
+  ERROR                      : anything else
+
+-------
+Output
+-------
+  metrics/logs/benchmark_<YYYYMMDD_HHMMSS>.jsonl: one JSON line per config.
+  Failures are logged too (record_failure), not just successes: earlier
+  versions logged only completed transfers, which made the success rate read
+  100% by construction (survivorship bias). Schema ≥ 1.1 records carry the
+  reconciliation fields bits_corrected / bits_sacrificed.
+
+-----------
+Integration
+-----------
+Downstream consumer: scripts/generate_dashboard.py reads every
+benchmark_*.jsonl in metrics/logs/, renders matplotlib PNGs plus the
+interactive Plotly page metrics/dashboard.html, and mirrors it to
+demo-frontend/public/dashboard.html for the React frontend.
 
 Speed notes
 -----------
-n_qubits=200 (matches the system default used in Phase 1-7 tests).
-n_pairs_per_setting=50 (E91 CHSH verification runs, not used here — BB84 only).
-Sequential execution to keep memory stable.
-
-Output
-------
-  metrics/logs/benchmark_<YYYYMMDD_HHMMSS>.jsonl   — one JSON line per config
-  Console summary printed at the end.
+n_qubits=200 matches the system default used in Phase 1-7 tests.
+n_pairs_per_setting=50 (E91 CHSH verification runs, not used here; BB84 only).
+Sequential execution keeps memory stable and avoids port contention;
+each configuration is bounded by a 60s timeout.
 
 Usage
 -----
@@ -70,22 +132,37 @@ from transmission.payload_splitter import split_payload
 # Grid definition
 # ---------------------------------------------------------------------------
 
-N_QUBITS = 200          # matches system default (Phase 1-7 tests)
+# Qubit count for every BB84 session in the sweep.
+# 200 matches the system default exercised by the Phase 1-7 tests, keeping
+# benchmark statistics comparable with the unit-test figures (~100 sifted
+# bits, ~75 check bits at the default check fraction of 0.75).
+N_QUBITS = 200
 
+# Split-policy axis: exercises every branch of compute_split().
+# low -> ~25% quantum share, medium -> ~50%, high -> ~75% of the payload.
 SECURITY_LEVELS = ["low", "medium", "high"]
 
+# Payload axis: representative message sizes spanning an order of magnitude.
 PAYLOAD_SIZES = [
-    (16,  "small"),   # 16 B  — typical short control message
-    (128, "medium"),  # 128 B — small data packet
-    (512, "large"),   # 512 B — moderate payload; max quantum = 384 B = 1536 ebits
+    (16,  "small"),   # typical short control message
+    (128, "medium"),  # small data packet
+    (512, "large"),   # moderate payload; max quantum segment = 384 B = 1536 ebits
 ]
 
+# Noise axis: covers both sides of the 0.11 BB84 abort threshold.
+#   0.00 noiseless       : baseline, measured QBER should be exactly 0.
+#   0.05 moderate        : below threshold, transfers proceed end to end.
+#   0.12 above_threshold : deliberately past BB84_QBER_THRESHOLD (0.11),
+#                          sessions must abort before any payload moves.
 NOISE_LEVELS = [
     (0.00, "noiseless"),
     (0.05, "moderate"),
-    (0.12, "above_threshold"),   # > BB84_QBER_THRESHOLD (0.11) → abort
+    (0.12, "above_threshold"),
 ]
 
+# Classical-channel fault axis: off vs 5% bit-error rate on the classical
+# segment plaintext. Packet loss stays at 0 because the reroute-recovery
+# path under test reacts to corrupted bits, not to dropped packets.
 FAULT_CONFIGS = [
     ({"fault_injection": {"enabled": False}},                        "off"),
     ({"fault_injection": {"enabled": True, "bit_error_probability": 0.05,
@@ -98,6 +175,23 @@ FAULT_CONFIGS = [
 
 
 def _free_port() -> int:
+    r"""
+    Obtain an unused loopback port from the OS.
+
+    -------
+    Returns
+    -------
+    int
+        A port number that was free at call time.
+
+    -----
+    Notes
+    -----
+    Binding to port 0 lets the kernel pick an ephemeral port, so concurrent
+    benchmark runs never fight over fixed port numbers. The port could in
+    principle be re-assigned between this call and the caller's bind, but
+    each configuration binds immediately, making collisions vanishingly rare.
+    """
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
@@ -106,6 +200,34 @@ def _free_port() -> int:
 def _make_config(server_port: int, data_port: int, quantum_port: int,
                  security_level: str, available_ebits: int,
                  noise: float) -> dict:
+    r"""
+    Assemble the shared config dict consumed by EbitServer and both Nodes.
+
+    ----------
+    Parameters
+    ----------
+    server_port : int
+        Loopback port for the EbitServer control plane (ebit distribution).
+    data_port : int
+        Loopback port for the AES-GCM encrypted classical data channel.
+    quantum_port : int
+        Loopback port for the superdense-coding quantum channel stream.
+    security_level : str
+        "low" | "medium" | "high"; drives the compute_split() policy.
+    available_ebits : int
+        Entanglement budget advertised to the split controller; the sweep
+        sets this to 2x the maximum possible quantum demand of the payload.
+    noise : float
+        injected_qber passed through to the QKD simulation.
+
+    -------
+    Returns
+    -------
+    dict
+        Config in the shape expected by EbitServer(config) / Node(name, config):
+        protocol is pinned to "BB84" and n_pairs_per_setting=50 is carried
+        for interface compatibility even though BB84 ignores it.
+    """
     return {
         "host": "127.0.0.1",
         "server_port": server_port,
@@ -126,15 +248,58 @@ def run_one_transfer(
     fault_cfg: dict,
     timeout_s: float = 60.0,
 ) -> dict:
-    """
-    Run one complete transfer pipeline.
+    r"""
+    Execute one complete transfer pipeline in an isolated loopback deployment.
 
-    Returns a result dict with:
-      outcome: "CLEAN_PASS" | "RECOVERED_VIA_REROUTE" | "CHANNEL_FAILURE" | "SESSION_ABORTED"
-      qber   : measured QBER (or the injected_qber if aborted before measurement)
-      qkd_elapsed_s, transfer_elapsed_s
-      node_a_session: QKDSession | None
-      decision, split, echo_result, injector
+    Spins up EbitServer + Node A + Node B, runs QKD, reconciliation, key
+    verification, split computation and the echo-validated transfer, then
+    tears everything down. This is the unit of work main() iterates over
+    the grid.
+
+    ----------
+    Parameters
+    ----------
+    config : dict
+        Assembled by _make_config(); shared verbatim by server and nodes.
+    payload : bytes
+        Plaintext message for Alice to transfer.
+    fault_cfg : dict
+        FaultInjector configuration for the classical segment
+        (see FAULT_CONFIGS).
+    timeout_s : float, default 60.0
+        Wall-clock budget for both worker threads before the run is
+        declared TIMED OUT.
+
+    -------
+    Returns
+    -------
+    dict
+        On completion:
+          ok               : True when no error, abort or incomplete reconciliation
+          aborted          : True when QKD raised SessionAbortedError (QBER > 0.11)
+          recon_incomplete : True when privacy amplification left no bits
+          errors           : {"A"/"B": exception} from whichever side failed
+          node_a           : Node A instance (None if it never got that far);
+                             carries session (qber, key, chsh) and timings
+          echo_result      : EchoValidationResult from transmission.echo_validation
+          qkd_elapsed_s    : wall time of the BB84 exchange
+          xfer_elapsed_s   : wall time of the payload transfer itself
+          decision, split  : compute_split() output and split_payload() output
+          recon_bob        : Bob-side Cascade result (source of bits_corrected /
+                             bits_sacrificed in the metrics log)
+          injector         : the FaultInjector instance actually used
+        On thread hang:
+          timed_out=True plus tb_alive/ta_alive flags; all other keys absent.
+
+    -----
+    Notes
+    -----
+    Alice and Bob each run on their own thread because both sides block on
+    socket I/O against each other; the threads communicate readiness through
+    threading.Event objects and share results through single-element list
+    holders (closure cells are read-only). Bob explicitly closes his data
+    channels on any failure so Alice's blocking recv() unblocks at once
+    instead of hanging until the per-config timeout.
     """
     server = EbitServer(config)
     server.start()
@@ -312,6 +477,32 @@ def run_one_transfer(
 
 
 def main() -> None:
+    r"""
+    Orchestrate the full benchmark sweep.
+
+    ----------
+    Workflow
+    ----------
+    1. Open a MetricsCollector on metrics/logs/benchmark_<timestamp>.jsonl;
+       one session_id (uuid4) groups all records of this sweep.
+    2. Expand the grid (54 configs) and iterate sequentially.
+    3. Per config: build payload (deterministic byte pattern i % 256),
+       provision ebit budget at 2x the max quantum demand so ebit
+       scarcity never distorts the split-policy axis, run
+       run_one_transfer(), classify the outcome, and write either a
+       record_transfer() or record_failure() row.
+    4. Print a per-config progress line plus a final summary with outcome
+       counters, records written and total elapsed time.
+
+    -----
+    Notes
+    -----
+    Outcome classification order matters: aborts and reconciliation
+    failures are checked before generic errors because they carry
+    protocol semantics, not bugs. KEY_MISMATCH_ERROR is detected by
+    exception type name (InvalidTag from cryptography) rather than an
+    import, keeping this script decoupled from the crypto backend.
+    """
     ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir   = _PROJECT_ROOT / "metrics" / "logs"
     log_path  = log_dir / f"benchmark_{ts}.jsonl"
@@ -329,7 +520,7 @@ def main() -> None:
     total = len(configs)
 
     print(f"\n{'='*62}", flush=True)
-    print(f"  Phase 8 — Benchmark sweep  ({total} configurations)", flush=True)
+    print(f"  Phase 8 Benchmark sweep  ({total} configurations)", flush=True)
     print(f"  Log: {log_path.relative_to(_PROJECT_ROOT)}", flush=True)
     print(f"{'='*62}\n", flush=True)
 
@@ -494,11 +685,11 @@ def main() -> None:
     print(f"  SESSION_ABORTED:      {counts['SESSION_ABORTED']:3d}  "
           f"(injected_qber > 0.11 after {2} retries)", flush=True)
     print(f"  RECONCILIATION_INCOMPLETE:{counts['RECONCILIATION_INCOMPLETE']:3d}  "
-          f"(even-count errors in block — single-pass limitation)", flush=True)
+          f"(even-count errors in block; single-pass limitation)", flush=True)
     print(f"  KEY_MISMATCH_ERROR:   {counts['KEY_MISMATCH_ERROR']:3d}  "
-          f"(should be 0 now — residual if reconciliation logic is bypassed)", flush=True)
+          f"(should be 0 now; residual if reconciliation logic is bypassed)", flush=True)
     print(f"  TIMEOUT:              {counts['TIMEOUT']:3d}  "
-          f"(hung >60s — unexpected; socket fix should eliminate these)", flush=True)
+          f"(hung >60s, unexpected; socket fix should eliminate these)", flush=True)
     print(f"  ERROR:                {counts['ERROR']:3d}", flush=True)
     print(f"  Records written:      {records_written:3d}  "
           f"(successes + failures)", flush=True)
