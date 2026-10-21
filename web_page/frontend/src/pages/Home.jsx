@@ -2,16 +2,56 @@ import { useState, useEffect } from "react"
 import "./Home.css"
 
 const QUANTUM_JARGONS = [
-  { term: "Qubit", definition: "Quantum bit; Fundamental unit of quantum information, existing in superposition of |0⟩ and |1⟩" },
-  { term: "Superposition", definition: "Ability of a quantum system to exist in multiple states simultaneously until measured" },
-  { term: "Entanglement", definition: "Quantum correlation where particles become linked, and the state of one instantly determines the other" },
-  { term: "Quantum Channel", definition: "Communication channel that transmits quantum states, enabling QKD and quantum teleportation" },
-  { term: "Classical Channel", definition: "Traditional communication channel transmitting classical bits (0 or 1)" },
-  { term: "QKD", definition: "Quantum Key Distribution; Protocol using quantum mechanics to securely distribute encryption keys" },
-  { term: "BB84 Protocol", definition: "First QKD protocol using photon polarization states for key exchange" },
-  { term: "Decoherence", definition: "Loss of quantum coherence due to environmental interaction, causing quantum information loss" },
-  { term: "Bell State", definition: "Maximally entangled two-qubit states forming basis for quantum teleportation" },
-  { term: "No-Cloning Theorem", definition: "Impossible to create identical copy of arbitrary unknown quantum state" },
+  {
+    term: "Qubit",
+    definition: "Quantum bit — the fundamental unit of quantum information, existing in superposition of |0⟩ and |1⟩",
+    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/qubits"
+  },
+  {
+    term: "Superposition",
+    definition: "Ability of a quantum system to exist in multiple states simultaneously until measured",
+    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/superposition"
+  },
+  {
+    term: "Entanglement",
+    definition: "Quantum correlation where particles become linked, and the state of one instantly determines the other",
+    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/entanglement"
+  },
+  {
+    term: "Quantum Channel",
+    definition: "Communication channel that transmits quantum states, enabling QKD and quantum teleportation",
+    url: "https://quantum-computing.ibm.com/learn/quantum-communication/quantum-channels"
+  },
+  {
+    term: "Classical Channel",
+    definition: "Traditional communication channel transmitting classical bits (0 or 1)",
+    url: "https://quantum-computing.ibm.com/learn/quantum-communication/classical-channels"
+  },
+  {
+    term: "QKD",
+    definition: "Quantum Key Distribution — protocol using quantum mechanics to securely distribute encryption keys",
+    url: "https://quantum-computing.ibm.com/learn/quantum-cryptography/quantum-key-distribution"
+  },
+  {
+    term: "BB84 Protocol",
+    definition: "First QKD protocol using photon polarization states for key exchange",
+    url: "https://quantum-computing.ibm.com/learn/quantum-cryptography/bb84-protocol"
+  },
+  {
+    term: "Decoherence",
+    definition: "Loss of quantum coherence due to environmental interaction, causing quantum information loss",
+    url: "https://quantum-computing.ibm.com/learn/quantum-hardware/decoherence"
+  },
+  {
+    term: "Bell State",
+    definition: "Maximally entangled two-qubit states forming basis for quantum teleportation",
+    url: "https://quantum-computing.ibm.com/learn/quantum-communication/bell-states"
+  },
+  {
+    term: "No-Cloning Theorem",
+    definition: "Impossible to create identical copy of arbitrary unknown quantum state",
+    url: "https://quantum-computing.ibm.com/learn/quantum-foundations/no-cloning-theorem"
+  }
 ]
 
 export default function Home() {
@@ -97,11 +137,22 @@ export default function Home() {
 
         <section className="jargons-section">
           <h3 className="section-title">Quantum Lexicon</h3>
-          <p className="section-subtitle">Essential terminology for understanding quantum communication</p>
+          <p className="section-subtitle">Essential terminology for understanding quantum communication — click any term for IBM Quantum Learning</p>
           <div className="jargons-grid">
-            {QUANTUM_JARGONS.map(({ term, definition }, idx) => (
+            {QUANTUM_JARGONS.map(({ term, definition, url }, idx) => (
               <article key={term} className="jargon-card" style={{ "--delay": `${idx * 100}ms` }}>
-                <h4 className="jargon-term">{term}</h4>
+                <div className="jargon-header">
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="jargon-link"
+                    aria-label={`Learn more about ${term} on IBM Quantum Learning`}
+                  >
+                    <h4 className="jargon-term">{term}</h4>
+                    <span className="external-icon" aria-hidden="true">↗</span>
+                  </a>
+                </div>
                 <p className="jargon-definition">{definition}</p>
               </article>
             ))}
@@ -135,7 +186,7 @@ export default function Home() {
       </main>
 
       <footer className="footer">
-        <p>QuantumTransfer - 2026</p>
+        <p>QuantumTransfer — 2026</p>
       </footer>
     </div>
   )
