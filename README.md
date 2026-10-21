@@ -71,7 +71,7 @@ protect the most security-sensitive portion of the payload and AES-256-GCM for t
 remainder, with the split fraction driven by a runtime decision tree that responds
 to the current channel's QBER and the caller's declared security level.
 
-**Why Qiskit, not QuNetSim?** Stated in `TODO.md`: *"no QuNetSim — build directly
+**Why Qiskit, not QuNetSim?** Stated in `TODO.md`: *"no QuNetSim - build directly
 on Qiskit for quantum primitives and plain Python classes for the network layer, to
 avoid dependency risk from an inactive library."* QuNetSim is deliberately excluded
 from `requirements.txt` and `environment.yml`.
@@ -294,7 +294,7 @@ payload_size_bytes: 1024   # Default payload size for ad-hoc use; benchmark over
 available_ebits: 50        # Ebit pool size for the session; controls whether the
                            # high-security ebit-constrained path is taken
 
-injected_qber: 0.0         # [0.0, 1.0] — probability of bit-flip per qubit (noise model)
+injected_qber: 0.0         # [0.0, 1.0] - probability of bit-flip per qubit (noise model)
                            # 0.0 = noiseless; ≥ 0.11 → session aborted after 2 retries
 
 # ── Network ───────────────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ fault_injection:
   enabled: false                   # MUST stay false outside Phase 8 benchmarking
   bit_error_probability: 0.0       # Per-bit plaintext flip probability
   packet_loss_probability: 0.0     # Per-packet simulated drop probability
-                                   # (see Known Limitations — PLR is simulated)
+                                   # (see Known Limitations - PLR is simulated)
 
 # ── Split Controller ──────────────────────────────────────────────────────────
 split:
@@ -322,7 +322,7 @@ split:
   quantum_fraction_low: 0.25       # security_level="low"
   quantum_fraction_medium: 0.50    # security_level="medium"  (default)
   max_quantum_fraction: 0.75       # Ceiling for security_level="high"
-                                   # Never 1.0 — classical path must always exist
+                                   # Never 1.0 - classical path must always exist
                                    # for echo/sifting traffic
   bits_per_ebit: 2                 # SDC theoretical capacity (2 classical bits per qubit)
 ```
@@ -371,7 +371,7 @@ benchmark
 conda run -n hcq_proj python -u scripts/run_benchmark.py 2>/dev/null
 ```
 
-> Use the direct Python path rather than `conda run` — `conda run` adds a buffering
+> Use the direct Python path rather than `conda run` - `conda run` adds a buffering
 > layer that suppresses per-config progress prints until the entire sweep finishes.
 
 Expected outcomes per noise level (n_qubits=200, reconciliation enabled):
@@ -396,12 +396,12 @@ conda run -n hcq_proj python scripts/generate_dashboard.py
 
 Reads all `metrics/logs/benchmark_*.jsonl` files. Produces:
 
-- `metrics/figures/fig1_qber_vs_noise.png` — measured QBER vs inferred noise level
-- `metrics/figures/fig2_outcome_breakdown.png` — CLEAN_PASS / aborted / incomplete by noise
-- `metrics/figures/fig3_split_ratio.png` — quantum fraction by security level
-- `metrics/figures/fig5_skr_vs_qber.png` — Secret Key Rate vs QBER scatter
-- `metrics/figures/fig6_throughput_latency.png` — throughput and latency by payload size
-- `metrics/dashboard.html` — self-contained interactive Plotly page (4–5 MB, no server needed)
+- `metrics/figures/fig1_qber_vs_noise.png` - measured QBER vs inferred noise level
+- `metrics/figures/fig2_outcome_breakdown.png` - CLEAN_PASS / aborted / incomplete by noise
+- `metrics/figures/fig3_split_ratio.png` - quantum fraction by security level
+- `metrics/figures/fig5_skr_vs_qber.png` - Secret Key Rate vs QBER scatter
+- `metrics/figures/fig6_throughput_latency.png` - throughput and latency by payload size
+- `metrics/dashboard.html` - self-contained interactive Plotly page (4–5 MB, no server needed)
 
 ### Run a single end-to-end transfer (integration tests)
 
@@ -481,11 +481,11 @@ validation module:
 ```
 
 Security events (echo mismatch with low QBER) use a separate `echo_validation.SECURITY`
-logger at CRITICAL level — visually unmistakable in the log stream.
+logger at CRITICAL level - visually unmistakable in the log stream.
 
 ### Dashboard
 
-Open `metrics/dashboard.html` directly in any web browser — no server needed.
+Open `metrics/dashboard.html` directly in any web browser - no server needed.
 The file is fully self-contained (Plotly.js is embedded). Hover over any point for
 exact values; scroll or zoom within panels.
 
@@ -506,7 +506,7 @@ These limitations are explicitly documented in the source code.
 
 ### Single-pass reconciliation catches only odd-count errors
 
-`quantum/reconciliation.py` docstring (§ "Known limitation — single-pass only"):
+`quantum/reconciliation.py` docstring (§ "Known limitation - single-pass only"):
 
 > A block containing an **even number of errors** passes its parity check silently.
 > The errors remain in the reconciled key and are NOT corrected. Full multi-pass
@@ -523,7 +523,7 @@ outcome in benchmark output. The test `test_even_error_count_undetected` in
 `classical/fault_injector.py` docstring:
 
 - **BER**: actual fraction of bits flipped in plaintext by the injector; real value.
-- **PLR**: *simulated* — "the fraction of packets that would have been lost on a real
+- **PLR**: *simulated* - "the fraction of packets that would have been lost on a real
   lossy channel at this probability." TCP does not actually drop the packets (doing so
   would deadlock Bob's `recv()`); instead the injector delivers zeros of the same
   length and increments the drop counter.
@@ -536,7 +536,7 @@ These are clearly labelled `_simulated` in the metrics schema and in log output.
 
 The `quantum_transmit.py` SDC implementation runs the full encode+decode circuit in
 AerSimulator, which is noiseless by default. Bit errors in the quantum segment are
-therefore impossible in normal operation — all observable corruption comes from the
+therefore impossible in normal operation - all observable corruption comes from the
 classical fault injector. A real quantum channel would require a noise model in
 AerSimulator.
 
@@ -544,7 +544,7 @@ AerSimulator.
 
 Documented in `split_controller/controller.py`:
 
-> MAX_QUANTUM_FRACTION = 0.75 — ceiling for "high" security, deliberately NOT 1.0.
+> MAX_QUANTUM_FRACTION = 0.75 - ceiling for "high" security, deliberately NOT 1.0.
 > The classical channel must always carry at least 25% because: (a) Phase 6 echo /
 > retransmission traffic needs a classical path; (b) QKD classical sifting messages
 > travel over this channel; (c) keeping 100% quantum would defeat the "hybrid" premise.
@@ -583,7 +583,7 @@ development history (before these commits) are not available in the repository.
 The following bugs are verifiable from comments in the current source or from
 explicit test assertions.
 
-### Bug 1 — Basis-asymmetric noise model in BB84
+### Bug 1 - Basis-asymmetric noise model in BB84
 
 **What happened**: the original noise injection applied only an X gate (bit-flip),
 which causes errors in Z-basis measurements but is transparent in X-basis
@@ -596,7 +596,7 @@ both an X gate (probability `injected_noise`) *and* an independent Z gate
 X-basis, giving symmetric QBER ≈ `injected_noise` regardless of basis. The
 multi-line comment in `run_bb84()` explains the per-basis error probability algebra.
 
-### Bug 2 — Socket hang when one side raises before completing its protocol turn
+### Bug 2 - Socket hang when one side raises before completing its protocol turn
 
 **What happened**: when Bob's AES-GCM decryption raised `InvalidTag` (due to a key
 mismatch caused by residual QKD bit errors), Bob's exception propagated before
@@ -615,7 +615,7 @@ or pong, with no timeout. This caused the entire benchmark run to hang.
    each side sends `encrypt(b"hbd-verify-fail", _RECON_AUTH_KEY)` to unblock the
    peer's `recv()`. If even that send fails, the socket is explicitly closed.
 
-### Bug 3 — Empty payload for 512 B benchmark config
+### Bug 3 - Empty payload for 512 B benchmark config
 
 **What happened**: the benchmark script originally generated payloads using
 `bytes(range(psz % 256)) * (psz // 256 + 1)`. For `psz = 512`,
@@ -623,11 +623,11 @@ or pong, with no timeout. This caused the entire benchmark run to hang.
 configurations silently transmitted zero bytes.
 
 **Fix** (verifiable in `scripts/run_benchmark.py`, line 340):
-`payload = bytes(i % 256 for i in range(psz))` — generates exactly `psz` bytes
+`payload = bytes(i % 256 for i in range(psz))` - generates exactly `psz` bytes
 (0x00, 0x01, …, 0xFF, 0x00, …) with no dependency on modular arithmetic.
 An `assert len(payload) == psz` guard on the next line catches any future regression.
 
-### Bug 4 — Bisection depth could theoretically loop forever
+### Bug 4 - Bisection depth could theoretically loop forever
 
 Not a bug that occurred in practice, but a defensive guard added after diagnosis:
 `quantum/reconciliation.py` includes `max_depth = ceil(log2(max(e-s, 2))) + 2`
@@ -673,7 +673,7 @@ From `environment.yml` and `requirements.txt`:
 ### Explicitly excluded
 
 **QuNetSim** is not used and not listed anywhere in the dependency files.
-Reason stated in `TODO.md`: *"no QuNetSim — build directly on Qiskit for quantum
+Reason stated in `TODO.md`: *"no QuNetSim - build directly on Qiskit for quantum
 primitives and plain Python classes for the network layer, to avoid dependency risk
 from an inactive library."*
 
