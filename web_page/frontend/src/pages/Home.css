@@ -1,5 +1,4 @@
 :root {
-  --font-color: #1a1a2e;
   --bg-primary: #fff5f5;
   --bg-secondary: #ffe0e0;
   --bg-tertiary: #ffcccc;
@@ -15,7 +14,6 @@
 }
 
 .dark {
-  --font-color: #f8f0ff;
   --bg-primary: #1a0033;
   --bg-secondary: #2d004d;
   --bg-tertiary: #3d0066;
@@ -130,28 +128,6 @@
   letter-spacing: -0.02em;
 }
 
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.font-picker label {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.font-picker input[type="color"] {
-  width: 36px;
-  height: 36px;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  background: none;
-  padding: 0;
-}
-
 .theme-toggle {
   width: 44px;
   height: 44px;
@@ -202,7 +178,7 @@
   font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 800;
   line-height: 1.1;
-  color: var(--font-color);
+  color: var(--text-primary);
   margin-bottom: 1rem;
   letter-spacing: -0.03em;
 }
@@ -252,7 +228,7 @@
 .stat-value {
   font-size: 2rem;
   font-weight: 800;
-  color: var(--font-color);
+  color: var(--text-primary);
   line-height: 1;
 }
 
@@ -275,7 +251,7 @@
 .section-title {
   font-size: 1.75rem;
   font-weight: 700;
-  color: var(--font-color);
+  color: var(--text-primary);
   text-align: center;
   margin-bottom: 0.5rem;
 }
@@ -334,7 +310,7 @@
 .jargon-term {
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--font-color);
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
@@ -402,7 +378,7 @@
 .channel-name {
   font-size: 1.35rem;
   font-weight: 700;
-  color: var(--font-color);
+  color: var(--text-primary);
   margin-bottom: 1.5rem;
 }
 

@@ -19,7 +19,6 @@ export default function Home() {
     const saved = localStorage.getItem("darkMode")
     return saved ? JSON.parse(saved) : window.matchMedia("(prefers-color-scheme: dark)").matches
   })
-  const [fontColor, setFontColor] = useState(() => localStorage.getItem("fontColor") || "#1a1a2e")
   const [animate, setAnimate] = useState(false)
 
   useEffect(() => {
@@ -28,17 +27,9 @@ export default function Home() {
   }, [darkMode])
 
   useEffect(() => {
-    localStorage.setItem("fontColor", fontColor)
-    document.documentElement.style.setProperty("--font-color", fontColor)
-  }, [fontColor])
-
-  useEffect(() => {
     const timer = setTimeout(() => setAnimate(true), 100)
     return () => clearTimeout(timer)
   }, [])
-
-  const lightFontColors = ["#1a1a2e", "#8b0000", "#dc143c", "#b22222", "#ff6b6b", "#e74c3c"]
-  const darkFontColors = ["#f8f0ff", "#d8b4fe", "#c084fc", "#a855f7", "#9333ea", "#7e22ce"]
 
   return (
     <div className={`home ${darkMode ? "dark" : "light"} ${animate ? "animate-in" : ""}`}>
@@ -53,25 +44,13 @@ export default function Home() {
           <span className="logo-icon">⚛</span>
           <h1 className="logo-text">QuantumTransfer</h1>
         </div>
-        <div className="controls">
-          <div className="font-picker">
-            <label htmlFor="fontColor">Font: </label>
-            <input
-              id="fontColor"
-              type="color"
-              value={fontColor}
-              onChange={(e) => setFontColor(e.target.value)}
-              aria-label="Font color"
-            />
-          </div>
-          <button
-            className="theme-toggle"
-            onClick={() => setDarkMode(!darkMode)}
-            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {darkMode ? "☀" : "🌙"}
-          </button>
-        </div>
+        <button
+          className="theme-toggle"
+          onClick={() => setDarkMode(!darkMode)}
+          aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {darkMode ? "☀" : "🌙"}
+        </button>
       </header>
 
       <main className="main">
