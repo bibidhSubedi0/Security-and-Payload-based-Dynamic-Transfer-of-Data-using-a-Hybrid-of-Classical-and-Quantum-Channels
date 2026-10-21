@@ -1,4 +1,0 @@
-[console_scripts]
-benchmark = scripts.run_benchmark:main
-demo = demo.backend.main:app
-generate-dashboard = scripts.generate_dashboard:main
