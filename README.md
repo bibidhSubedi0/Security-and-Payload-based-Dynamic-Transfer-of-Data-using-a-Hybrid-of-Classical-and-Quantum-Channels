@@ -12,6 +12,26 @@ channel quality (QBER), security level, and available entangled bit (ebit) count
 > circuits are real Qiskit circuits with proper Bell-state encoding and
 > measurement, but they execute locally.
 
+## Quickstart
+
+```bash
+# Clone and enter
+cd Security-and-Payload-based-Dynamic-Transfer-of-Data-using-a-Hybrid-of-Classical-and-Quantum-Channels
+
+# Install in editable mode
+pip install -e . --break-system-packages
+
+# Run all 158 tests
+pytest
+
+# Or run the full benchmark sweep
+benchmark
+
+# Generate the interactive HTML dashboard
+generate-dashboard
+# open metrics/dashboard.html in a browser
+```
+
 ---
 
 ## Table of Contents
@@ -225,7 +245,7 @@ hbd_class_quant/
 - [Miniconda](https://docs.conda.io/en/latest/miniconda.html) or Anaconda
 - Python 3.13 (pinned in `environment.yml`)
 
-### Install
+### Install (conda)
 
 ```bash
 # Create and activate the conda environment
@@ -237,6 +257,18 @@ pip install plotly
 ```
 
 The environment name is `hcq_proj` as declared in `environment.yml`.
+
+### Install (pip / editable)
+
+```bash
+# From the project root (contains pyproject.toml)
+pip install -e . --break-system-packages
+# or in a venv:
+python -m venv .venv && source .venv/bin/activate && pip install -e .
+```
+
+This installs the `hbd-qkd-transfer` package with all dependencies and makes
+console scripts available: `benchmark`, `demo`, `generate-dashboard`.
 
 `requirements.txt` lists the same packages and can be used with `pip install -r requirements.txt` in any Python 3.13 environment instead.
 
@@ -332,7 +364,11 @@ conda run -n hcq_proj python -m pytest tests/test_reconciliation.py -v
 noise levels (0.00 / 0.05 / 0.12) × 2 fault settings (off / BER=5%).
 
 ```bash
-/home/abhinavkarn/miniconda3/envs/hcq_proj/bin/python -u scripts/run_benchmark.py 2>/dev/null
+# Using installed console script (recommended)
+benchmark
+
+# Or directly
+conda run -n hcq_proj python -u scripts/run_benchmark.py 2>/dev/null
 ```
 
 > Use the direct Python path rather than `conda run` — `conda run` adds a buffering
@@ -351,6 +387,10 @@ Total runtime: approximately 25–30 seconds.
 ### Generate the dashboard
 
 ```bash
+# Using installed console script
+generate-dashboard
+
+# Or directly
 conda run -n hcq_proj python scripts/generate_dashboard.py
 ```
 
@@ -598,6 +638,15 @@ real BB84 key under any noise level.
 ---
 
 ## 11. Tech Stack
+
+### Package & Entry Points
+
+```
+hbd-qkd-transfer (src layout via pyproject.toml)
+├── benchmark              # scripts.run_benchmark:main
+├── demo                   # demo.backend.main:app (FastAPI)
+└── generate-dashboard     # scripts.generate_dashboard:main
+```
 
 ### Pinned dependencies
 
