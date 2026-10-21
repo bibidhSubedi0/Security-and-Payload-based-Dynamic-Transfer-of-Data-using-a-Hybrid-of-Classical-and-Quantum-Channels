@@ -492,7 +492,7 @@ export default function Test() {
             </header>
 
             <div className="results-grid">
-              {RESULTS.map((result, idx) => (
+              {RESULTS.filter(r => r.id !== "recommendation").map((result, idx) => (
                 <ResultCard
                   key={result.id}
                   result={result}
@@ -502,6 +502,11 @@ export default function Test() {
                   animate={animateResults}
                 />
               ))}
+            </div>
+
+            <div className={`recommendation-box ${results.recommendation.startsWith("⚠") ? "warning" : "good"}`}>
+              <span className="rec-label">System Recommendation</span>
+              <span className="rec-message">{results.recommendation}</span>
             </div>
 
             <div className="legend">
@@ -765,10 +770,24 @@ function ParamControl({ param, value, onChange, isActive, onFocus, onBlur }) {
 
   return (
     <div className={`param-control ${isActive ? "active" : ""}`}>
-      <label htmlFor={param.id} className="param-label" onClick={() => onFocus?.()}>
-        <span className="param-name">{param.label}</span>
-        <span className="param-value">{value}{param.unit && ` ${param.unit}`}</span>
-      </label>
+      <div className="param-label-row">
+        <button
+          type="button"
+          className="param-info-toggle"
+          onClick={(e) => {
+            e.stopPropagation()
+            onFocus()
+          }}
+          aria-label={`Explain ${param.label}`}
+          aria-expanded={isActive}
+        >
+          ?
+        </button>
+        <label htmlFor={param.id} className="param-label" onClick={() => onFocus?.()}>
+          <span className="param-name">{param.label}</span>
+          <span className="param-value">{value}{param.unit && ` ${param.unit}`}</span>
+        </label>
+      </div>
 
       <div className="param-input-wrapper">
         {isRange && (
@@ -802,19 +821,6 @@ function ParamControl({ param, value, onChange, isActive, onFocus, onBlur }) {
           </select>
         )}
       </div>
-
-      <button
-        type="button"
-        className="param-info-toggle"
-        onClick={(e) => {
-          e.stopPropagation()
-          onFocus()
-        }}
-        aria-label={`Explain ${param.label}`}
-        aria-expanded={isActive}
-      >
-        ?
-      </button>
 
       {isActive && (
         <div className="param-explanation">
