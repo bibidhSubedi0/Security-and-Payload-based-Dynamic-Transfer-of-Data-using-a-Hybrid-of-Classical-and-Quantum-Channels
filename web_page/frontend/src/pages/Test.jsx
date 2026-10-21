@@ -303,6 +303,78 @@ function barWidth(value, params) {
   return Math.min((value / max) * 250, 250)
 }
 
+function noiseToQber(params, noise) {
+  const base = params.qber * 0.4
+  const dark = (params.darkCountRate / 10000) * 4
+  const dist = (params.quantumDistance / 200) * 3
+  return Math.min(12, base + dark + dist + noise * 0.35)
+}
+
+function qberNoiseCurve(params) {
+  const pts = []
+  for (let n = 0; n <= 50; n += 5) {
+    const x = 40 + (n / 50) * 260
+    const y = 150 - (noiseToQber(params, n) / 12) * 140
+    pts.push(`${x},${Math.max(10, y)}`)
+  }
+  return pts.join(" ")
+}
+
+const OUTCOME_BUCKETS = [
+  { label: "0-3%", secure: 0.95, discard: 0.04, abort: 0.01 },
+  { label: "3-7%", secure: 0.7, discard: 0.25, abort: 0.05 },
+  { label: "7-11%", secure: 0.25, discard: 0.5, abort: 0.25 },
+  { label: ">11%", secure: 0, discard: 0.3, abort: 0.7 },
+]
+
+function splitRatioFor(level) {
+  const map = {
+    low: { quantum: 0.3, classical: 0.7 },
+    medium: { quantum: 0.55, classical: 0.45 },
+    high: { quantum: 0.8, classical: 0.2 },
+    critical: { quantum: 1.0, classical: 0 },
+  }
+  return map[level] || map.medium
+}
+
+function throughputFor(size, params) {
+  const time = (size * 8) / (params.classicalBandwidth * 1000) + (params.classicalLatency / 1000) * 3
+  return size / Math.max(time, 0.001)
+}
+
+function payloadToX(size) {
+  return 40 + (Math.log10(Math.max(size, 1)) / Math.log10(10000)) * 260
+}
+
+function throughputToY(t) {
+  const maxT = 90
+  return 150 - (Math.min(t, maxT) / maxT) * 140
+}
+
+function latencyToY(sec) {
+  const maxS = 72
+  return 150 - (Math.min(sec, maxS) / maxS) * 140
+}
+
+function throughputCurve(params) {
+  const pts = []
+  for (let i = 0; i <= 40; i++) {
+    const size = Math.pow(10, (i / 40) * 4)
+    pts.push(`${payloadToX(size)},${throughputToY(throughputFor(size, params))}`)
+  }
+  return pts.join(" ")
+}
+
+function latencyCurve(params) {
+  const pts = []
+  for (let i = 0; i <= 40; i++) {
+    const size = Math.pow(10, (i / 40) * 4)
+    const time = (size * 8) / (params.classicalBandwidth * 1000) + (params.classicalLatency / 1000) * 3
+    pts.push(`${payloadToX(size)},${latencyToY(time)}`)
+  }
+  return pts.join(" ")
+}
+
 export default function Test() {
   const [params, setParams] = useState(() => {
     const saved = localStorage.getItem("testParams")
@@ -548,6 +620,134 @@ export default function Test() {
                     shrinks as QBER approaches the switch threshold; the classical arc stays
                     near full. The buffer buys resilience: {params.keyBufferSize} MB of stored
                     key smooths over quantum outages.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Measured QBER vs Injected Noise</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Line chart of measured QBER against injected eavesdropper noise">
+                    <line x1="40" y1="150" x2="300" y2="150" className="axis" />
+                    <line x1="40" y1="10" x2="40" y2="150" className="axis" />
+                    <line x1="40" y1={150 - (11 / 12) * 140} x2="300" y2={150 - (11 / 12) * 140} className="abort-line" strokeDasharray="4 3" />
+                    <text x="296" y={150 - (11 / 12) * 140 - 4} className="abort-label" textAnchor="end">11% abort limit</text>
+                    <polyline points={qberNoiseCurve(params)} className="chart-line" fill="none" />
+                    <line x1="40" y1={150 - (params.qber / 12) * 140} x2="300" y2={150 - (params.qber / 12) * 140} className="marker-line" />
+                    <text x="300" y={150 - (params.qber / 12) * 140 - 5} className="marker-label" textAnchor="end">current {params.qber}%</text>
+                    <text x="170" y="172" className="axis-label" textAnchor="middle">Injected Noise (Eve power %)</text>
+                    <text x="14" y="80" className="axis-label" textAnchor="middle" transform="rotate(-90 14 80)">Measured QBER (%)</text>
+                    <text x="44" y="164" className="tick-label">0</text>
+                    <text x="280" y="164" className="tick-label">50</text>
+                    <text x="46" y="16" className="tick-label">12</text>
+                  </svg>
+                  <p className="figure-explain">
+                    Simulates an eavesdropper (Eve) injecting noise into the quantum channel.
+                    The rising curve shows measured QBER climbing as Eve's power increases.
+                    When it crosses the dashed 11% line, BB84 detects the intrusion with
+                    certainty and aborts. Your horizontal line marks the configured QBER
+                    ({params.qber}%) - the vertical distance to the curve is your safety margin.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Outcome Breakdown by Noise Level</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Stacked bars showing secure, discarded, and aborted key fractions by noise bucket">
+                    <line x1="40" y1="150" x2="300" y2="150" className="axis" />
+                    {OUTCOME_BUCKETS.map((b, i) => {
+                      const x = 55 + i * 62
+                      const barH = 110
+                      const secureH = b.secure * barH
+                      const discardH = b.discard * barH
+                      const abortH = b.abort * barH
+                      const highlight = noiseToQber(params, i === 3 ? 45 : (i * 10 + 5)) >= [0, 3, 7, 11][i]
+                      return (
+                        <g key={b.label} opacity={highlight ? 1 : 0.45}>
+                          <rect x={x} y={150 - secureH} width="40" height={secureH} className="seg-secure" />
+                          <rect x={x} y={150 - secureH - discardH} width="40" height={discardH} className="seg-discard" />
+                          <rect x={x} y={150 - secureH - discardH - abortH} width="40" height={abortH} className="seg-abort" />
+                          <text x={x + 20} y="164" className="tick-label" textAnchor="middle">{b.label}</text>
+                        </g>
+                      )
+                    })}
+                    <rect x="40" y="12" width="10" height="10" className="seg-secure" />
+                    <text x="54" y="21" className="tick-label">secure</text>
+                    <rect x="100" y="12" width="10" height="10" className="seg-discard" />
+                    <text x="114" y="21" className="tick-label">discarded</text>
+                    <rect x="180" y="12" width="10" height="10" className="seg-abort" />
+                    <text x="194" y="21" className="tick-label">abort</text>
+                    <text x="170" y="176" className="axis-label" textAnchor="middle">Noise Bucket (QBER range)</text>
+                  </svg>
+                  <p className="figure-explain">
+                    How sifted key material is split at each noise level: green = secure key
+                    after privacy amplification, amber = bits discarded during error
+                    correction, red = full protocol abort. The 0-3% bucket is your normal
+                    operating zone (mostly green). Past 7% most bits get discarded and past
+                    11% the protocol aborts entirely (all red).
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Split Ratio by Security Level</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Stacked horizontal bars showing quantum versus classical channel split for each security level">
+                    {["low", "medium", "high", "critical"].map((level, i) => {
+                      const { quantum, classical } = splitRatioFor(level)
+                      const y = 30 + i * 34
+                      const isCurrent = params.payloadSensitivity === level
+                      const qw = quantum * 200
+                      const cw = classical * 200
+                      return (
+                        <g key={level} opacity={isCurrent ? 1 : 0.5}>
+                          <text x="40" y={y + 22} className="tick-label" style={{ fontSize: "9px", fontWeight: isCurrent ? 700 : 400 }}>
+                            {level[0].toUpperCase() + level.slice(1)}
+                          </text>
+                          <rect x="95" y={y + 6} width={qw} height="18" rx="4" className="seg-secure" />
+                          <rect x={95 + qw} y={y + 6} width={cw} height="18" rx="4" className="seg-abort" />
+                          <text x={98 + qw} y={y + 19} className="bar-value" style={{ fontSize: "9px" }}>
+                            {Math.round(quantum * 100)}% Q / {Math.round(classical * 100)}% C
+                          </text>
+                          {isCurrent && <rect x="90" y={y + 2} width="210" height="26" rx="6" className="current-ring" fill="none" strokeWidth="2" />}
+                        </g>
+                      )
+                    })}
+                    <rect x="95" y="164" width="10" height="10" className="seg-secure" />
+                    <text x="109" y="173" className="tick-label">quantum channel</text>
+                    <rect x="195" y="164" width="10" height="10" className="seg-abort" />
+                    <text x="209" y="173" className="tick-label">classical channel</text>
+                  </svg>
+                  <p className="figure-explain">
+                    How the hybrid system splits traffic across channels at each sensitivity
+                    level. Low sensitivity leans classical (green bar shorter); critical
+                    sensitivity forces 100% quantum with no classical fallback. The ring
+                    highlights your current selection ({params.payloadSensitivity}): higher
+                    sensitivity shifts the balance toward quantum at the cost of throughput.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Throughput and Latency by Payload Size</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Dual line chart of throughput and transfer latency across payload sizes">
+                    <line x1="40" y1="150" x2="300" y2="150" className="axis" />
+                    <line x1="40" y1="10" x2="40" y2="150" className="axis" />
+                    <polyline points={throughputCurve(params)} className="chart-line" fill="none" />
+                    <polyline points={latencyCurve(params)} className="chart-line-alt" fill="none" />
+                    <line x1={payloadToX(params.payloadSize)} y1="10" x2={payloadToX(params.payloadSize)} y2="150" className="marker-line" />
+                    <circle cx={payloadToX(params.payloadSize)} cy={throughputToY(throughputFor(params.payloadSize, params))} r="5" className="marker-dot" />
+                    <text x={Math.min(payloadToX(params.payloadSize) + 8, 240)} y="24" className="marker-label">
+                      {Math.round(throughputFor(params.payloadSize, params))} MB/s
+                    </text>
+                    <rect x="40" y="160" width="10" height="10" className="seg-secure" />
+                    <text x="54" y="169" className="tick-label">throughput (MB/s)</text>
+                    <rect x="170" y="160" width="10" height="10" className="seg-abort" />
+                    <text x="184" y="169" className="tick-label">transfer time (s)</text>
+                    <text x="44" y="20" className="tick-label">max</text>
+                    <text x="44" y="146" className="tick-label">0</text>
+                    <text x="40" y="176" className="axis-label" textAnchor="start">Payload: 1 MB ... 10 GB</text>
+                  </svg>
+                  <p className="figure-explain">
+                    Green line: effective throughput (payload divided by transfer time).
+                    Red line: wall-clock transfer time. Small payloads are dominated by
+                    fixed latency ({params.classicalLatency} ms x 3 round trips), so
+                    throughput starts low then plateaus as payload grows. Your marker shows
+                    the current {params.payloadSize} MB payload: {results.transferTime}s to transfer.
                   </p>
                 </figure>
               </div>

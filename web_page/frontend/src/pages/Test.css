@@ -648,6 +648,40 @@
   stroke-width: 2.5;
 }
 
+.figure-svg .chart-line-alt {
+  stroke: #f59e0b;
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+}
+
+.figure-svg .abort-line {
+  stroke: #ef4444;
+  stroke-width: 1.5;
+  opacity: 0.8;
+}
+
+.figure-svg .abort-label {
+  font-size: 8px;
+  fill: #ef4444;
+  font-weight: 600;
+}
+
+.figure-svg .seg-secure {
+  fill: #22c55e;
+}
+
+.figure-svg .seg-discard {
+  fill: #f59e0b;
+}
+
+.figure-svg .seg-abort {
+  fill: #ef4444;
+}
+
+.figure-svg .current-ring {
+  stroke: var(--accent);
+}
+
 .figure-svg .marker-line {
   stroke: var(--text-secondary);
   stroke-width: 1;
