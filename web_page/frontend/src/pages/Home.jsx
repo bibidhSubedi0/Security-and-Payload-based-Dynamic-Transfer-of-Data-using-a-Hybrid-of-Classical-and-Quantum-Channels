@@ -4,53 +4,53 @@ import "./Home.css"
 const QUANTUM_JARGONS = [
   {
     term: "Qubit",
-    definition: "Quantum bit — the fundamental unit of quantum information, existing in superposition of |0⟩ and |1⟩",
-    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/qubits"
+    definition: "Quantum bit - the fundamental unit of quantum information, existing in superposition of |0> and |1>",
+    url: "https://en.wikipedia.org/wiki/Qubit"
   },
   {
     term: "Superposition",
     definition: "Ability of a quantum system to exist in multiple states simultaneously until measured",
-    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/superposition"
+    url: "https://en.wikipedia.org/wiki/Quantum_superposition"
   },
   {
     term: "Entanglement",
     definition: "Quantum correlation where particles become linked, and the state of one instantly determines the other",
-    url: "https://quantum-computing.ibm.com/learn/what-is-quantum-computing/entanglement"
+    url: "https://en.wikipedia.org/wiki/Quantum_entanglement"
   },
   {
     term: "Quantum Channel",
     definition: "Communication channel that transmits quantum states, enabling QKD and quantum teleportation",
-    url: "https://quantum-computing.ibm.com/learn/quantum-communication/quantum-channels"
+    url: "https://en.wikipedia.org/wiki/Quantum_channel"
   },
   {
     term: "Classical Channel",
     definition: "Traditional communication channel transmitting classical bits (0 or 1)",
-    url: "https://quantum-computing.ibm.com/learn/quantum-communication/classical-channels"
+    url: "https://www.sciencedirect.com/topics/mathematics/classical-channel"
   },
   {
     term: "QKD",
-    definition: "Quantum Key Distribution — protocol using quantum mechanics to securely distribute encryption keys",
-    url: "https://quantum-computing.ibm.com/learn/quantum-cryptography/quantum-key-distribution"
+    definition: "Quantum Key Distribution - protocol using quantum mechanics to securely distribute encryption keys",
+    url: "https://en.wikipedia.org/wiki/Quantum_key_distribution"
   },
   {
     term: "BB84 Protocol",
     definition: "First QKD protocol using photon polarization states for key exchange",
-    url: "https://quantum-computing.ibm.com/learn/quantum-cryptography/bb84-protocol"
+    url: "https://en.wikipedia.org/wiki/BB84"
   },
   {
     term: "Decoherence",
     definition: "Loss of quantum coherence due to environmental interaction, causing quantum information loss",
-    url: "https://quantum-computing.ibm.com/learn/quantum-hardware/decoherence"
+    url: "https://en.wikipedia.org/wiki/Quantum_decoherence"
   },
   {
     term: "Bell State",
     definition: "Maximally entangled two-qubit states forming basis for quantum teleportation",
-    url: "https://quantum-computing.ibm.com/learn/quantum-communication/bell-states"
+    url: "https://en.wikipedia.org/wiki/Bell_state"
   },
   {
     term: "No-Cloning Theorem",
     definition: "Impossible to create identical copy of arbitrary unknown quantum state",
-    url: "https://quantum-computing.ibm.com/learn/quantum-foundations/no-cloning-theorem"
+    url: "https://en.wikipedia.org/wiki/No-cloning_theorem"
   }
 ]
 
@@ -137,7 +137,7 @@ export default function Home() {
 
         <section className="jargons-section">
           <h3 className="section-title">Quantum Lexicon</h3>
-          <p className="section-subtitle">Essential terminology for understanding quantum communication — click any term for IBM Quantum Learning</p>
+          <p className="section-subtitle">Essential terminology for understanding quantum communication - click any term for IBM Quantum Learning</p>
           <div className="jargons-grid">
             {QUANTUM_JARGONS.map(({ term, definition, url }, idx) => (
               <article key={term} className="jargon-card" style={{ "--delay": `${idx * 100}ms` }}>
@@ -186,7 +186,7 @@ export default function Home() {
       </main>
 
       <footer className="footer">
-        <p>QuantumTransfer — 2026</p>
+        <p>QuantumTransfer - 2026</p>
       </footer>
     </div>
   )

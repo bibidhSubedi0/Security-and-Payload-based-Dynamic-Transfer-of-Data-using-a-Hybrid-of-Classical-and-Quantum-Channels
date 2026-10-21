@@ -133,28 +133,28 @@ const RESULTS = [
     label: "Raw Key Rate",
     unit: "kbps",
     description: "Bits per second after sifting, before error correction. Determined by detector efficiency, distance, and pulse rate. Higher = faster key generation.",
-    interpretation: (v) => v > 1000 ? "Excellent — real-time key refresh possible" : v > 100 ? "Good — suitable for most applications" : v > 10 ? "Moderate — batch key generation needed" : "Poor — distance too long or detectors too noisy"
+    interpretation: (v) => v > 1000 ? "Excellent - real-time key refresh possible" : v > 100 ? "Good - suitable for most applications" : v > 10 ? "Moderate - batch key generation needed" : "Poor - distance too long or detectors too noisy"
   },
   {
     id: "secureKeyRate",
     label: "Secure Key Rate",
     unit: "kbps",
     description: "Final secret key rate after error correction and privacy amplification. This is the actual usable key material for encryption.",
-    interpretation: (v) => v > 500 ? "Excellent — high-throughput QKD" : v > 50 ? "Good — practical for VPN/file encryption" : v > 5 ? "Moderate — suitable for key wrapping" : "Insufficient — consider trusted nodes or shorter distance"
+    interpretation: (v) => v > 500 ? "Excellent - high-throughput QKD" : v > 50 ? "Good - practical for VPN/file encryption" : v > 5 ? "Moderate - suitable for key wrapping" : "Insufficient - consider trusted nodes or shorter distance"
   },
   {
     id: "maxDistance",
     label: "Maximum Secure Distance",
     unit: "km",
     description: "Farthest distance where secure key rate > 0. Beyond this, QBER exceeds 11% threshold and privacy amplification yields zero key.",
-    interpretation: (v) => v > 150 ? "Excellent — metro/regional deployment" : v > 100 ? "Good — campus/metro area" : v > 50 ? "Moderate — building/campus" : "Limited — lab/short-haul only"
+    interpretation: (v) => v > 150 ? "Excellent - metro/regional deployment" : v > 100 ? "Good - campus/metro area" : v > 50 ? "Moderate - building/campus" : "Limited - lab/short-haul only"
   },
   {
     id: "transferTime",
     label: "Payload Transfer Time",
     unit: "s",
     description: "Time to transmit payload over classical channel at given bandwidth, including protocol overhead for encryption/authentication.",
-    interpretation: (v) => v < 1 ? "Instantaneous — real-time capable" : v < 10 ? "Fast — interactive use" : v < 60 ? "Moderate — batch transfer" : "Slow — consider compression or higher bandwidth"
+    interpretation: (v) => v < 1 ? "Instantaneous - real-time capable" : v < 10 ? "Fast - interactive use" : v < 60 ? "Moderate - batch transfer" : "Slow - consider compression or higher bandwidth"
   },
   {
     id: "keyConsumption",
@@ -164,9 +164,9 @@ const RESULTS = [
     interpretation: (v, params) => {
       const sensitivity = params.payloadSensitivity
       if (sensitivity === "critical" || sensitivity === "high") {
-        return v > 0 ? "Matches payload rate — one-time pad active" : "No key available — transfer blocked"
+        return v > 0 ? "Matches payload rate - one-time pad active" : "No key available - transfer blocked"
       }
-      return v > 0 ? "Session keys derived — efficient" : "No quantum key — fallback to classical"
+      return v > 0 ? "Session keys derived - efficient" : "No quantum key - fallback to classical"
     }
   },
   {
@@ -174,7 +174,7 @@ const RESULTS = [
     label: "Channel Availability",
     unit: "%",
     description: "Probability the hybrid system can transfer data at any moment. Accounts for quantum outages, classical failures, and buffer depletion.",
-    interpretation: (v) => v > 99.9 ? "Five nines — carrier grade" : v > 99 ? "High — enterprise suitable" : v > 95 ? "Moderate — acceptable for non-critical" : "Low — requires redundancy"
+    interpretation: (v) => v > 99.9 ? "Five nines - carrier grade" : v > 99 ? "High - enterprise suitable" : v > 95 ? "Moderate - acceptable for non-critical" : "Low - requires redundancy"
   },
   {
     id: "securityLevel",
@@ -232,11 +232,11 @@ function calculateResults(params) {
   const securityLevel = isOTP ? Math.min(256, keyBufferSize * 8) : 256
 
   let recommendation = "Configuration OK"
-  if (qber > switchThreshold) recommendation = "⚠ QBER exceeds switch threshold — quantum channel paused, using buffered keys"
-  else if (secureRate < keyConsumption && isOTP) recommendation = "⚠ Secure key rate < consumption — buffer will deplete"
-  else if (maxDist < quantumDistance) recommendation = "⚠ Distance exceeds maximum secure range — no key generation possible"
-  else if (availability < 95) recommendation = "⚠ Low availability — increase key buffer or improve classical channel"
-  else if (secureRate > 100 && availability > 99) recommendation = "✓ Optimal — high secure rate with excellent availability"
+  if (qber > switchThreshold) recommendation = "⚠ QBER exceeds switch threshold - quantum channel paused, using buffered keys"
+  else if (secureRate < keyConsumption && isOTP) recommendation = "⚠ Secure key rate < consumption - buffer will deplete"
+  else if (maxDist < quantumDistance) recommendation = "⚠ Distance exceeds maximum secure range - no key generation possible"
+  else if (availability < 95) recommendation = "⚠ Low availability - increase key buffer or improve classical channel"
+  else if (secureRate > 100 && availability > 99) recommendation = "✓ Optimal - high secure rate with excellent availability"
 
   return {
     rawKeyRate: Math.round(rawRate),
@@ -298,7 +298,7 @@ export default function Test() {
             <span className="nav-text">QuantumTransfer</span>
           </a>
           <div className="nav-links">
-            <a href="/" className="nav-link">Introduction</a>
+            <a href="#/" className="nav-link">Introduction</a>
             <span className="nav-link active">Test Parameters</span>
           </div>
         </nav>
