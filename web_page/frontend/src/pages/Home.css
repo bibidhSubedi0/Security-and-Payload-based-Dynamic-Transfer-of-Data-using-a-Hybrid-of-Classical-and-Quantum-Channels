@@ -69,25 +69,112 @@
   z-index: 1;
 }
 
-.particle {
+.petal {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
+  width: var(--size, 12px);
+  height: var(--size, 12px);
+  background: var(--accent-light);
   opacity: 0;
-  animation: float var(--duration, 15s) infinite ease-in-out;
-  left: calc(var(--i) * 3.33%);
-  top: 100%;
-  animation-delay: calc(var(--i) * 0.5s);
+  animation: fall var(--duration, 15s) infinite ease-in-out;
+  left: calc(var(--i) * 4%);
+  top: -10%;
+  animation-delay: var(--delay, 0s);
+  transform-origin: center bottom;
+  filter: drop-shadow(0 2px 4px var(--shadow));
 }
 
-@keyframes float {
-  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
-  10% { opacity: 0.6; }
-  50% { transform: translateY(-60vh) rotate(180deg); opacity: 0.3; }
-  90% { opacity: 0.6; }
-  100% { transform: translateY(-120vh) rotate(360deg); opacity: 0; }
+.petal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  clip-path: polygon(
+    50% 0%,
+    65% 15%,
+    85% 35%,
+    90% 55%,
+    85% 75%,
+    65% 95%,
+    50% 100%,
+    35% 95%,
+    15% 75%,
+    10% 55%,
+    15% 35%,
+    35% 15%
+  );
+  animation: sway var(--duration, 15s) infinite ease-in-out;
+  transform-origin: center bottom;
+}
+
+.petal:nth-child(odd)::before {
+  background: var(--accent);
+  animation-duration: calc(var(--duration, 15s) * 1.1);
+}
+
+.petal:nth-child(3n)::before {
+  background: var(--accent-dark);
+  animation-duration: calc(var(--duration, 15s) * 0.9);
+}
+
+.dark .petal {
+  background: var(--accent-light);
+}
+
+.dark .petal::before {
+  background: var(--accent);
+}
+
+.dark .petal:nth-child(odd)::before {
+  background: var(--accent-light);
+}
+
+.dark .petal:nth-child(3n)::before {
+  background: var(--accent-dark);
+}
+
+@keyframes fall {
+  0% {
+    transform: translateY(0) translateX(0) rotate(var(--rotate, 0deg));
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.7;
+  }
+  25% {
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(40vh) translateX(var(--sway, 0px)) rotate(calc(var(--rotate, 0deg) + 180deg));
+    opacity: 0.4;
+  }
+  75% {
+    opacity: 0.6;
+  }
+  92% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(110vh) translateX(var(--drift, 0px)) rotate(calc(var(--rotate, 0deg) + 360deg));
+    opacity: 0;
+  }
+}
+
+@keyframes sway {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(12deg) scale(1.05);
+  }
+  50% {
+    transform: rotate(-8deg) scale(0.95);
+  }
+  75% {
+    transform: rotate(15deg) scale(1.02);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
 }
 
 .header {

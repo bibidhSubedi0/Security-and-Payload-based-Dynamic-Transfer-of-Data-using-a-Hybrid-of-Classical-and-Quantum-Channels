@@ -34,8 +34,20 @@ export default function Home() {
   return (
     <div className={`home ${darkMode ? "dark" : "light"} ${animate ? "animate-in" : ""}`}>
       <div className="particles" aria-hidden="true">
-        {[...Array(30)].map((_, i) => (
-          <span key={i} className="particle" style={{ "--i": i }} />
+        {[...Array(25)].map((_, i) => (
+          <span
+            key={i}
+            className="petal"
+            style={{
+              "--i": i,
+              "--delay": `${i * 150}ms`,
+              "--duration": `${12 + Math.random() * 8}s`,
+              "--size": `${8 + Math.random() * 12}px`,
+              "--drift": `${(Math.random() - 0.5) * 100}px`,
+              "--rotate": `${Math.random() * 360}deg`,
+              "--sway": `${(Math.random() - 0.5) * 60}px`,
+            }}
+          />
         ))}
       </div>
 
