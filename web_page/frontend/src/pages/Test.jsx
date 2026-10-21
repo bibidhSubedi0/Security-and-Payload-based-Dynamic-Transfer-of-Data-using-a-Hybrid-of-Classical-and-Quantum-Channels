@@ -418,7 +418,7 @@ export default function Test() {
 
       <header className="test-header">
         <nav className="nav">
-          <a href="/" className="nav-brand">
+          <a href="#/" className="nav-brand">
             <span className="nav-icon">⚛</span>
             <span className="nav-text">QuantumTransfer</span>
           </a>

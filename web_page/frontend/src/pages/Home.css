@@ -215,6 +215,31 @@
   letter-spacing: -0.02em;
 }
 
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-btn {
+  display: inline-block;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
 .theme-toggle {
   width: 44px;
   height: 44px;

@@ -3,17 +3,16 @@ import Home from "./pages/Home"
 import Test from "./pages/Test"
 import "./App.css"
 
+function getRoute() {
+  const hash = window.location.hash.slice(1)
+  return hash.replace(/^\/+/, "") === "test" ? "test" : "home"
+}
+
 function App() {
-  const [page, setPage] = useState(() => {
-    const hash = window.location.hash.slice(1)
-    return hash === "test" ? "test" : "home"
-  })
+  const [page, setPage] = useState(getRoute)
 
   useEffect(() => {
-    const onHashChange = () => {
-      const hash = window.location.hash.slice(1)
-      setPage(hash === "test" ? "test" : "home")
-    }
+    const onHashChange = () => setPage(getRoute())
     window.addEventListener("hashchange", onHashChange)
     return () => window.removeEventListener("hashchange", onHashChange)
   }, [])

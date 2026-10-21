@@ -96,13 +96,16 @@ export default function Home() {
           <span className="logo-icon">⚛</span>
           <h1 className="logo-text">QuantumTransfer</h1>
         </div>
-        <button
-          className="theme-toggle"
-          onClick={() => setDarkMode(!darkMode)}
-          aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {darkMode ? "☀" : "🌙"}
-        </button>
+        <nav className="header-nav">
+          <a href="#/test" className="nav-btn">Test Parameters</a>
+          <button
+            className="theme-toggle"
+            onClick={() => setDarkMode(!darkMode)}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {darkMode ? "☀" : "🌙"}
+          </button>
+        </nav>
       </header>
 
       <main className="main">
