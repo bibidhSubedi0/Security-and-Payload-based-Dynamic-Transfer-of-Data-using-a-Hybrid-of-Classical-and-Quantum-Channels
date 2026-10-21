@@ -32,10 +32,6 @@ condition to paper over with silent truncation.
 
 from __future__ import annotations
 
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from qiskit_aer import AerSimulator
 from quantum.superdense_coding import encode_and_decode
 

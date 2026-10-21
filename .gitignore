@@ -8,3 +8,4 @@ demo-frontend/dist/
 .minor_project/
 Project Report/
 docs/
+*.egg-info/

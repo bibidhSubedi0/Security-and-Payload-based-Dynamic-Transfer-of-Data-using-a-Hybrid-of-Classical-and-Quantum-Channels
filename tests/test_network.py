@@ -25,9 +25,6 @@ import time
 import pytest
 import yaml
 
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from server.ebit_server import EbitServer
 from node.node import Node, SessionAbortedError
 

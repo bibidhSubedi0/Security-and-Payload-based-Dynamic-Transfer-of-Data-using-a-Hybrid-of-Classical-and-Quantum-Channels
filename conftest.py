@@ -1,2 +1,2 @@
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+# pytest config - package is installed via pyproject.toml
+# No sys.path manipulation needed

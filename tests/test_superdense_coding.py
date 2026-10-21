@@ -1,8 +1,5 @@
 """Tests for superdense coding."""
 
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from quantum.superdense_coding import encode_and_decode, run_superdense_coding_all
 
 

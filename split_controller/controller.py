@@ -67,11 +67,7 @@ All constants are module-level named values and can be overridden via the
 from __future__ import annotations
 
 import math
-import sys
-import pathlib
 from dataclasses import dataclass
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from quantum.bb84 import BB84_QBER_THRESHOLD   # 0.11, single authoritative source
 

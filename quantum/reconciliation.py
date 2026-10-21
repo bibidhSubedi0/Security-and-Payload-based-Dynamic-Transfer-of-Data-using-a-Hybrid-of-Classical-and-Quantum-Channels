@@ -86,11 +86,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import sys
-import pathlib
 from dataclasses import dataclass
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from classical.aes_channel import encrypt, decrypt, InvalidTag
 

@@ -8,10 +8,6 @@ symmetric partner uses so the concurrency wiring in Node is symmetric.
 
 from __future__ import annotations
 
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from classical.aes_channel import encrypt, decrypt
 from classical.transport import DataChannel
 

@@ -118,14 +118,7 @@ from __future__ import annotations
 
 import math
 import random
-import sys
-import pathlib
 from dataclasses import dataclass, field
-
-# Make the project root importable when this file is executed outside the
-# package context (e.g. `python classical/fault_injector.py`) so that
-# `from metrics.logger import ...` resolves without installation.
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from metrics.logger import get_logger
 
