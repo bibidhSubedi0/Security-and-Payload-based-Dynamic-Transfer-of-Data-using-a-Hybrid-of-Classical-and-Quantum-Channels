@@ -591,6 +591,162 @@
   }
 }
 
+.figures-panel {
+  margin-top: 2rem;
+}
+
+.figures-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1rem;
+}
+
+.figure-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  backdrop-filter: blur(10px);
+  margin: 0;
+  transition: border-color 0.3s ease;
+}
+
+.figure-card:hover {
+  border-color: var(--accent-light);
+}
+
+.figure-caption {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.figure-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.figure-svg .axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.figure-svg .axis-label {
+  font-size: 9px;
+  fill: var(--text-secondary);
+}
+
+.figure-svg .tick-label {
+  font-size: 9px;
+  fill: var(--text-secondary);
+}
+
+.figure-svg .chart-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.figure-svg .marker-line {
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.6;
+}
+
+.figure-svg .marker-dot {
+  fill: var(--accent);
+  stroke: var(--bg-primary);
+  stroke-width: 2;
+}
+
+.figure-svg .marker-label {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--text-primary);
+}
+
+.figure-svg .gauge-track {
+  stroke: var(--bg-tertiary);
+}
+
+.figure-svg .gauge-fill {
+  stroke: var(--accent);
+  transition: d 0.3s ease;
+}
+
+.figure-svg .gauge-fill.danger {
+  stroke: var(--accent-light);
+}
+
+.figure-svg .threshold-tick {
+  stroke: var(--text-secondary);
+}
+
+.figure-svg .gauge-value {
+  font-size: 26px;
+  font-weight: 800;
+  fill: var(--text-primary);
+}
+
+.figure-svg .gauge-sub {
+  font-size: 9px;
+  fill: var(--text-secondary);
+}
+
+.figure-svg .bar {
+  transition: width 0.3s ease;
+}
+
+.figure-svg .bar-quantum {
+  fill: #22c55e;
+}
+
+.figure-svg .bar-demand {
+  fill: var(--accent);
+}
+
+.figure-svg .bar-value {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--text-primary);
+}
+
+.figure-svg .donut-track {
+  stroke: var(--bg-tertiary);
+}
+
+.figure-svg .donut-fill {
+  stroke: var(--accent);
+  transition: stroke-dasharray 0.3s ease;
+}
+
+.figure-svg .donut-value {
+  font-size: 22px;
+  font-weight: 800;
+  fill: var(--text-primary);
+}
+
+.figure-svg .donut-sub {
+  font-size: 9px;
+  fill: var(--text-secondary);
+}
+
+.figure-svg .donut-legend-line {
+  font-size: 10px;
+  fill: var(--text-secondary);
+}
+
+.figure-explain {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 768px) {
   .nav {
     padding: 1rem;

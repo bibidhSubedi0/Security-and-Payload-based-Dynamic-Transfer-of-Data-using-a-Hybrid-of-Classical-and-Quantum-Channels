@@ -250,6 +250,59 @@ function calculateResults(params) {
   }
 }
 
+const CHART_W = { x0: 40, x1: 300, y0: 150, y1: 10, maxDist: 200, maxRate: 700 }
+
+function distToX(d) {
+  return CHART_W.x0 + (Math.min(d, CHART_W.maxDist) / CHART_W.maxDist) * (CHART_W.x1 - CHART_W.x0)
+}
+
+function rateToY(r) {
+  return CHART_W.y0 - (Math.min(r, CHART_W.maxRate) / CHART_W.maxRate) * (CHART_W.y0 - CHART_W.y1)
+}
+
+function keyRateCurve(params) {
+  const pts = []
+  for (let d = 0; d <= CHART_W.maxDist; d += 10) {
+    const loss = Math.exp(-d / 22)
+    const raw = 1000 * params.detectorEfficiency / 100 * loss * (1 - params.qber / 100)
+    const secure = Math.max(0, raw / (1.1 + params.qber / 50) * Math.max(0, 1 - params.qber / 11))
+    pts.push(`${distToX(d)},${rateToY(secure)}`)
+  }
+  return pts.join(" ")
+}
+
+function gaugeAngle(t) {
+  const a = Math.PI * (1 - Math.min(Math.max(t, 0), 1))
+  return 160 + 110 * Math.cos(a) * 0.92
+}
+
+function gaugeAngleY(t) {
+  const a = Math.PI * (1 - Math.min(Math.max(t, 0), 1))
+  return 150 - 110 * Math.sin(a) * 0.92
+}
+
+function gaugeAngle2(t) {
+  const a = Math.PI * (1 - Math.min(Math.max(t, 0), 1))
+  return 160 + 110 * Math.cos(a)
+}
+
+function gaugeAngleY2(t) {
+  const a = Math.PI * (1 - Math.min(Math.max(t, 0), 1))
+  return 150 - 110 * Math.sin(a)
+}
+
+function gaugeArc(t) {
+  const a = Math.PI * (1 - Math.min(Math.max(t, 0), 1))
+  const x = 160 + 110 * Math.cos(a)
+  const y = 150 - 110 * Math.sin(a)
+  return `M 50 150 A 110 110 0 0 1 ${x} ${y}`
+}
+
+function barWidth(value, params) {
+  const max = Math.max(1000, value, params.payloadSize)
+  return Math.min((value / max) * 250, 250)
+}
+
 export default function Test() {
   const [params, setParams] = useState(() => {
     const saved = localStorage.getItem("testParams")
@@ -387,6 +440,118 @@ export default function Test() {
                 <span className="legend-item info">ℹ Informational</span>
               </div>
             </div>
+
+            <section className="figures-panel" aria-labelledby="figures-title">
+              <header className="panel-header">
+                <h3 id="figures-title">Dynamic Statistics</h3>
+                <p className="panel-subtitle">Visual figures computed live from current parameters</p>
+              </header>
+
+              <div className="figures-grid">
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Key Rate vs Distance</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Line chart of secure key rate against distance">
+                    <line x1="40" y1="150" x2="300" y2="150" className="axis" />
+                    <line x1="40" y1="10" x2="40" y2="150" className="axis" />
+                    <text x="170" y="172" className="axis-label" textAnchor="middle">Distance (km)</text>
+                    <text x="14" y="80" className="axis-label" textAnchor="middle" transform="rotate(-90 14 80)">Key Rate (kbps)</text>
+                    <polyline points={keyRateCurve(params)} className="chart-line" fill="none" />
+                    <line x1={distToX(params.quantumDistance)} y1="10" x2={distToX(params.quantumDistance)} y2="150" className="marker-line" />
+                    <circle cx={distToX(params.quantumDistance)} cy={rateToY(results.secureKeyRate)} r="5" className="marker-dot" />
+                    <text x={Math.min(distToX(params.quantumDistance) + 8, 260)} y="24" className="marker-label">
+                      {results.secureKeyRate} kbps @ {params.quantumDistance} km
+                    </text>
+                    <text x="44" y="164" className="tick-label">0</text>
+                    <text x="284" y="164" className="tick-label">200</text>
+                  </svg>
+                  <p className="figure-explain">
+                    Exponential photon loss means key rate falls off rapidly with fiber length.
+                    The dot marks your current distance and computed secure rate. Push distance
+                    past {results.maxDistance} km and the line hits zero: privacy amplification
+                    can no longer squeeze secrets out of a noisy key.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">QBER vs Switch Threshold</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Gauge showing QBER against switch threshold">
+                    <path d="M 50 150 A 110 110 0 0 1 270 150" className="gauge-track" fill="none" strokeWidth="16" />
+                    <path
+                      d={gaugeArc(params.qber / 11)}
+                      className={`gauge-fill ${params.qber > params.switchThreshold ? "danger" : ""}`}
+                      fill="none"
+                      strokeWidth="16"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1={gaugeAngle(params.switchThreshold / 11)}
+                      y1={gaugeAngleY(params.switchThreshold / 11)}
+                      x2={gaugeAngle2(params.switchThreshold / 11)}
+                      y2={gaugeAngleY2(params.switchThreshold / 11)}
+                      className="threshold-tick"
+                      strokeWidth="3"
+                    />
+                    <text x="160" y="130" className="gauge-value" textAnchor="middle">{params.qber}%</text>
+                    <text x="160" y="150" className="gauge-sub" textAnchor="middle">current QBER</text>
+                    <text x="50" y="170" className="tick-label" textAnchor="middle">0%</text>
+                    <text x="270" y="170" className="tick-label" textAnchor="middle">11%</text>
+                  </svg>
+                  <p className="figure-explain">
+                    The needle shows your QBER. The vertical tick marks the switch threshold
+                    ({params.switchThreshold}%). When the needle passes the tick the quantum
+                    channel pauses and the system drains buffered keys instead. Past 11% the
+                    BB84 protocol can no longer distill a secret key at all.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Channel Load Split</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Bar chart comparing quantum key supply against payload demand">
+                    <rect x="40" y="30" width={barWidth(results.secureKeyRate, params)} height="34" rx="6" className="bar bar-quantum" />
+                    <text x={46 + barWidth(results.secureKeyRate, params)} y="52" className="bar-value">{results.secureKeyRate} kbps key supply</text>
+                    <rect x="40" y="90" width={barWidth(results.keyConsumption, params)} height="34" rx="6" className="bar bar-demand" />
+                    <text x={46 + barWidth(results.keyConsumption, params)} y="112" className="bar-value">{results.keyConsumption} kbps key demand</text>
+                    <line x1="40" y1="140" x2="300" y2="140" className="axis" />
+                    <text x="44" y="158" className="tick-label">0</text>
+                    <text x="270" y="158" className="tick-label">1000 kbps</text>
+                  </svg>
+                  <p className="figure-explain">
+                    Quantum key supply (green) versus encryption key demand (red). If demand
+                    outruns supply the key buffer drains and transfers stall. At the current
+                    sensitivity ({params.payloadSensitivity}) the system
+                    {results.secureKeyRate >= results.keyConsumption ? " comfortably covers" : " cannot cover"} demand.
+                  </p>
+                </figure>
+
+                <figure className="figure-card">
+                  <figcaption className="figure-caption">Availability Donut</figcaption>
+                  <svg viewBox="0 0 320 180" className="figure-svg" role="img" aria-label="Donut chart of hybrid channel availability">
+                    <circle cx="110" cy="90" r="58" className="donut-track" fill="none" strokeWidth="18" />
+                    <circle
+                      cx="110" cy="90" r="58"
+                      className="donut-fill"
+                      fill="none"
+                      strokeWidth="18"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(results.availability / 100) * 365} 365`}
+                      transform="rotate(-90 110 90)"
+                    />
+                    <text x="110" y="88" className="donut-value" textAnchor="middle">{results.availability}%</text>
+                    <text x="110" y="106" className="donut-sub" textAnchor="middle">uptime</text>
+                    <text x="190" y="60" className="donut-legend-line">Quantum: {Math.round(Math.max(0, 1 - params.qber / params.switchThreshold) * 100)}% active</text>
+                    <text x="190" y="85" className="donut-legend-line">Classical: 99.99% active</text>
+                    <text x="190" y="110" className="donut-legend-line">Buffer: {params.keyBufferSize} MB reserve</text>
+                    <text x="190" y="135" className="donut-legend-line">{results.availability > 99 ? "Carrier grade" : results.availability > 95 ? "Acceptable" : "Needs improvement"}</text>
+                  </svg>
+                  <p className="figure-explain">
+                    Blended uptime across both channels plus the key buffer. The quantum arc
+                    shrinks as QBER approaches the switch threshold; the classical arc stays
+                    near full. The buffer buys resilience: {params.keyBufferSize} MB of stored
+                    key smooths over quantum outages.
+                  </p>
+                </figure>
+              </div>
+            </section>
           </section>
         </div>
       </main>
