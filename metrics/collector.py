@@ -120,11 +120,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-# Make the project root importable when run outside package context.
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 # Public API of this module.
 __all__ = ["TransferRecord", "MetricsCollector"]
 

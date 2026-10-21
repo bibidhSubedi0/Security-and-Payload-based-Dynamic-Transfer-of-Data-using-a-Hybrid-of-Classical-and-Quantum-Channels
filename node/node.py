@@ -73,11 +73,6 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-# Make the project root importable when run outside package context.
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from metrics.logger import get_logger
 
 # Shared JSON logger; extra={} fields become top-level JSON keys on each line.

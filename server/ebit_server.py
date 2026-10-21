@@ -49,10 +49,6 @@ import socket
 import threading
 from typing import Any
 
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD, BB84_CHECK_FRACTION
 from quantum.e91 import run_e91
 from metrics.logger import get_logger

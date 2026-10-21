@@ -34,14 +34,9 @@ from __future__ import annotations
 import logging
 import pathlib
 import socket
-import sys
 import threading
 import time
 import uuid
-
-_PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
 
 from classical.aes_channel import derive_key
 from classical.transport import DataChannel

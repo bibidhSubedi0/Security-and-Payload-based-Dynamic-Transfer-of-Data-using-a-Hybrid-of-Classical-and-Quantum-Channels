@@ -34,10 +34,6 @@ import threading
 
 import pytest
 
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from classical.aes_channel import derive_key, encrypt, decrypt
 from classical.transport import send_frame, recv_frame
 from quantum.bb84 import run_bb84

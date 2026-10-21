@@ -19,12 +19,8 @@ Structure
 """
 
 import socket
-import sys
-import pathlib
 
 import pytest
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from classical.fault_injector import FaultInjector, InjectionRecord
 from classical.aes_channel import derive_key

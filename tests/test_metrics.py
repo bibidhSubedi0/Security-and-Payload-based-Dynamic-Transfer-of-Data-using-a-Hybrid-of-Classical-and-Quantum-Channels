@@ -30,9 +30,6 @@ import uuid
 
 import pytest
 
-import sys
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from classical.aes_channel import derive_key
 from classical.transport import DataChannel, send_frame, recv_frame
 from classical.fault_injector import FaultInjector
