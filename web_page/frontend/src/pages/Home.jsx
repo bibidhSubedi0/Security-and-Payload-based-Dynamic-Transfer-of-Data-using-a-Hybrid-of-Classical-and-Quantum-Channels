@@ -2,12 +2,12 @@ import { useState, useEffect } from "react"
 import "./Home.css"
 
 const QUANTUM_JARGONS = [
-  { term: "Qubit", definition: "Quantum bit — the fundamental unit of quantum information, existing in superposition of |0⟩ and |1⟩" },
+  { term: "Qubit", definition: "Quantum bit; Fundamental unit of quantum information, existing in superposition of |0⟩ and |1⟩" },
   { term: "Superposition", definition: "Ability of a quantum system to exist in multiple states simultaneously until measured" },
   { term: "Entanglement", definition: "Quantum correlation where particles become linked, and the state of one instantly determines the other" },
   { term: "Quantum Channel", definition: "Communication channel that transmits quantum states, enabling QKD and quantum teleportation" },
   { term: "Classical Channel", definition: "Traditional communication channel transmitting classical bits (0 or 1)" },
-  { term: "QKD", definition: "Quantum Key Distribution — protocol using quantum mechanics to securely distribute encryption keys" },
+  { term: "QKD", definition: "Quantum Key Distribution; Protocol using quantum mechanics to securely distribute encryption keys" },
   { term: "BB84 Protocol", definition: "First QKD protocol using photon polarization states for key exchange" },
   { term: "Decoherence", definition: "Loss of quantum coherence due to environmental interaction, causing quantum information loss" },
   { term: "Bell State", definition: "Maximally entangled two-qubit states forming basis for quantum teleportation" },
@@ -123,7 +123,7 @@ export default function Home() {
       </main>
 
       <footer className="footer">
-        <p>QuantumTransfer — Securing the future, one qubit at a time</p>
+        <p>QuantumTransfer - 2026</p>
       </footer>
     </div>
   )
