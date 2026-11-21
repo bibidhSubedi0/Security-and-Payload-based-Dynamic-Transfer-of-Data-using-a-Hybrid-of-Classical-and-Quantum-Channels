@@ -6,7 +6,7 @@ Structure
 1. Payload splitter unit tests   — split / reassemble with various fractions
 2. Quantum transmit unit tests   — SDC encode/decode bytes; EbitCapacityError
 3. Integration test              — full pipeline: QKD → split → dual-channel
-                                   concurrent tx → reassemble → byte-for-byte match
+                                    concurrent tx → reassemble → byte-for-byte match
 4. Concurrency check             — both channels overlap in time (not sequential)
 5. Failure test                  — quantum segment too large → EbitCapacityError
 
@@ -25,9 +25,6 @@ import threading
 import time
 
 import pytest
-
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from classical.aes_channel import derive_key
 from classical.transport import DataChannel

@@ -1,6 +1,7 @@
 """Tests for BB84 quantum key distribution."""
 
 import pytest
+
 from quantum.bb84 import run_bb84, BB84_QBER_THRESHOLD, BB84_CHECK_FRACTION
 
 

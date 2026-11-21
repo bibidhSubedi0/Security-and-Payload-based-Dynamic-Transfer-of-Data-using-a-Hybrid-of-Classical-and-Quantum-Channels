@@ -10,9 +10,6 @@ import random
 
 import pytest
 
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from split_controller.controller import (
     compute_split,
     SplitDecision,

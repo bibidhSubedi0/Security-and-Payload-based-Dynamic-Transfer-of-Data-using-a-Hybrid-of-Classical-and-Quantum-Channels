@@ -27,10 +27,6 @@ import threading
 
 import pytest
 
-import sys
-import pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from classical.aes_channel import derive_key
 from classical.transport import DataChannel
 from node.node import Node, SessionAbortedError
@@ -403,7 +399,7 @@ def test_echo_detects_eve_induced_mismatch():
     assert echo_result.mismatch_source == "quantum", (
         "Mismatch should be in the quantum segment (Eve attacks qubit channel)"
     )
-    assert echo_result.diagnosis == "QUANTUM_CHANNEL_ISSUE", (
+    assert echo_result.echo_diagnosis == "QUANTUM_CHANNEL_ISSUE", (
         "QBER=0.08 > ANOMALY_THRESHOLD=0.05 → QUANTUM_CHANNEL_ISSUE"
     )
     assert echo_result.retransmit_bytes < len(original), (
@@ -412,7 +408,7 @@ def test_echo_detects_eve_induced_mismatch():
 
     print(f"\n[echo_complementary] Phase 6 caught Eve's residual mismatch ✓")
     print(f"  mismatch_source={echo_result.mismatch_source}")
-    print(f"  diagnosis={echo_result.diagnosis}")
+    print(f"  diagnosis={echo_result.echo_diagnosis}")
     print(f"  retransmit_bytes={echo_result.retransmit_bytes} / {len(original)} total")
     print(f"  Layer 1 (Phase 2 QBER abort): primary defence   — catches ~99% of Eve attempts")
     print(f"  Layer 2 (Phase 6 echo):       secondary defence — catches residual mismatches")

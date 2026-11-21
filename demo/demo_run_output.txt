@@ -1,0 +1,42 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-8.3.5, pluggy-1.6.0 -- /home/bibidh/personal/Security-and-Payload-based-Dynamic-Transfer-of-Data-using-a-Hybrid-of-Classical-and-Quantum-Channels/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/bibidh/personal/Security-and-Payload-based-Dynamic-Transfer-of-Data-using-a-Hybrid-of-Classical-and-Quantum-Channels
+plugins: timeout-2.4.0
+collecting ... collected 1 item
+
+tests/test_end_to_end.py::test_e2e_bb84_full_pipeline {"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Ebit server started", "host": "127.0.0.1", "port": 41891}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Connected to server", "node_id": "B", "server": "127.0.0.1:41891"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "New connection", "addr": "('127.0.0.1', 57590)"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Node registered", "node_id": "B"}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Registered", "node_id": "B"}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Connected to server", "node_id": "A", "server": "127.0.0.1:41891"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "New connection", "addr": "('127.0.0.1', 57592)"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Node registered", "node_id": "A"}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Registered", "node_id": "A"}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Connection accepted", "node_id": "A", "peer": "B"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Session established", "alice": "A", "bob": "B"}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Connection established (Bob side)", "node_id": "B", "peer": "A"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "QKD attempt", "attempt": 1, "protocol": "BB84", "qber": 0.0, "chsh": null, "secure": true}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "QKD complete", "node_id": "A", "role": "alice", "key_len": 26, "qber": 0.0, "chsh": null, "attempt": 1}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "QKD complete", "node_id": "B", "role": "bob", "key_len": 26, "qber": 0.0, "chsh": null, "attempt": 1}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Payload transmitted", "node_id": "A", "total_len": 26, "quantum_len": 13, "classical_len": 13, "q_duration_s": 0.0692, "c_duration_s": 0.0046}
+{"asctime": "2026-08-20T15:35:27", "name": "node", "levelname": "INFO", "message": "Payload received and reassembled", "node_id": "B", "total_len": 26, "quantum_len": 13, "classical_len": 13}
+{"asctime": "2026-08-20T15:35:27", "name": "echo_validation", "levelname": "INFO", "message": "Echo validation: clean first-pass match", "total_bytes": 26, "qber": 0.0, "outcome": "CLEAN_PASS"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Node disconnected", "node_id": "B"}
+{"asctime": "2026-08-20T15:35:27", "name": "ebit_server", "levelname": "INFO", "message": "Node disconnected", "node_id": "A"}
+
+[e2e_bb84] payload=b'hbd-e2e-bb84-test-payload!'
+  QBER=0.0  SKR=128.0 bps
+  split=MEDIUM_SECURITY  q=13B  c=13B
+  throughput=353.4 B/s  latency=73.6 ms
+  echo_outcome=CLEAN_PASS ✓
+PASSED
+
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/pythonjsonlogger/jsonlogger.py:11
+  /home/bibidh/personal/Security-and-Payload-based-Dynamic-Transfer-of-Data-using-a-Hybrid-of-Classical-and-Quantum-Channels/.venv/lib/python3.14/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 1 passed, 1 warning in 0.88s =========================

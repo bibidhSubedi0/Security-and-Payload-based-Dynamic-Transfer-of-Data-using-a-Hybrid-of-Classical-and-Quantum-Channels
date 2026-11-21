@@ -20,9 +20,6 @@ import threading
 import pytest
 from cryptography.exceptions import InvalidTag
 
-import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-
 from classical.aes_channel import derive_key, encrypt, decrypt
 from classical.transport import DataChannel
 from quantum.bb84 import run_bb84

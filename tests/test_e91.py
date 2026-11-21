@@ -1,6 +1,7 @@
 """Tests for E91 entanglement-based QKD and CHSH inequality."""
 
 import math
+
 from quantum.e91 import run_e91
 
 

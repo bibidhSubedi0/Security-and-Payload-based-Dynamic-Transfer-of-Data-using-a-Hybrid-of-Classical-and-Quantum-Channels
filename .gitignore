@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
+demo-frontend/node_modules/
+demo-frontend/dist/
+.minor_project/
+Project Report/
+docs/
+*.egg-info/
